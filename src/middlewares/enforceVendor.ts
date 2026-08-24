@@ -1,0 +1,39 @@
+import { Request, Response, NextFunction, RequestHandler } from "express";
+import createHttpError from "http-errors";
+import { resolveVendorFromToken } from "../utils/resolveVendorFromToken";
+import { VendorRole, VendorProfileStatus } from "../generated/prisma/enums";
+
+/**
+ * Role-gated vendor middleware. Must run AFTER requireVendorAuth (needs
+ * req.vendor already set from a verified token).
+ *
+ * Usage:
+ *   vendorRouter.use(requireVendorAuth);
+ *   vendorRouter.get("/jobs", enforceVendor(VendorRole.TECHNICIAN), controller.listJobs);
+ *   vendorRouter.get("/leads", enforceVendor(), controller.listLeads); // any verified vendor role
+ */
+export function enforceVendor(...allowedRoles: VendorRole[]): RequestHandler {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const found = await resolveVendorFromToken(req);
+
+      if (found.profileStatus === VendorProfileStatus.BLOCKED) {
+        throw createHttpError(403, "Your vendor account has been blocked. Please contact support.");
+      }
+      if (found.profileStatus === VendorProfileStatus.DELETED) {
+        throw createHttpError(403, "This vendor account no longer exists.");
+      }
+
+      if (allowedRoles.length > 0 && !allowedRoles.includes(found.role)) {
+        throw createHttpError(403, `Access restricted to: ${allowedRoles.join(", ")}.`);
+      }
+
+      res.locals.vendorId = found.id;
+      res.locals.vendorRole = found.role;
+
+      next();
+    } catch (err) {
+      next(err);
+    }
+  };
+}

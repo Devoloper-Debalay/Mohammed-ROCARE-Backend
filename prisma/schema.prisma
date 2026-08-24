@@ -7,14 +7,16 @@ datasource db {
   provider = "postgresql"
 }
 
-/* ─────────────────────────────
-   ENUMS
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * ENUMS
+ * ──────────────────────────────
+ */
 enum Role {
-  CLIENT      // Sign-up user / customer
-  VENDOR      // Agent / vendor / technician
+  CLIENT // Sign-up user / customer
+  VENDOR // Agent / vendor / technician
   ADMIN
-  SADMIN      // Super admin
+  SADMIN // Super admin
 }
 
 enum Gender {
@@ -28,6 +30,12 @@ enum Languages {
   BENGALI
   ENGLISH
   HINDI
+}
+
+enum OtpPurpose {
+  SIGNUP
+  LOGIN
+  RESET_PASSWORD
 }
 
 enum ProductCategory {
@@ -45,19 +53,94 @@ enum ServiceCategory {
 }
 
 enum LeadSource {
-  MR                // Assigned to a specific MR (marketing rep)
-  ALL               // Open / all leads
-  ADDED_BY_MC       // Added by MC (RO, AC, Geyser, Service)
-  PRODUCT_INQUIRY   // Raised via product inquiry
+  MR // Assigned to a specific MR (marketing rep)
+  ALL // Open / all leads
+  ADDED_BY_MC // Added by MC (RO, AC, Geyser, Service)
+  PRODUCT_INQUIRY // Raised via product inquiry
   PRE_BOOKING
 }
 
 enum LeadStatus {
-  NEW         // just captured, not yet actioned by vendor/agent
-  ACCEPTED    // vendor/agent has accepted the lead
-  ONGOING     // work in progress on an accepted lead
+  NEW // just captured, not yet actioned by vendor/agent
+  ACCEPTED // vendor/agent has accepted the lead (coins deducted)
+  PENDING_START_VERIFICATION // technician submitted start-work proof, awaiting admin
+  ONGOING // admin verified start proof; work in progress
+  PENDING_DENIAL_VERIFICATION // technician submitted denial proof, awaiting admin
   COMPLETED
   DENIED
+}
+
+/**
+ * ─────────────────────────────
+ * VENDOR MODULE ENUMS (Phase 1)
+ * ──────────────────────────────
+ */
+enum VendorRole {
+  AGENT
+  TECHNICIAN
+}
+
+enum VendorVerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum VendorProfileStatus {
+  DRAFT
+  UNDER_REVIEW
+  PUBLISHED
+  BLOCKED
+  DELETED
+}
+
+enum WalletTxnType {
+  RECHARGE
+  LEAD_ACCEPT
+  LEAD_REFUND
+  PRODUCT_PURCHASE
+  PART_PURCHASE
+  COMMISSION_CREDIT
+  ADMIN_CREDIT
+  ADMIN_DEBIT
+  WITHDRAWAL
+  BONUS
+  OFFER_REWARD
+}
+
+enum WalletTxnStatus {
+  SUCCESS
+  PENDING
+  FAILED
+}
+
+enum CommissionStatus {
+  PENDING
+  CREDITED
+  REVERSED
+}
+
+enum VendorComplaintCategory {
+  WALLET
+  LEAD
+  PAYMENT
+  PRODUCT
+  TECHNICAL_ISSUE
+  OTHER
+}
+
+enum VendorComplaintStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum OfferType {
+  COUPON
+  VOUCHER
+  CASHBACK
+  PRODUCT_DISCOUNT
 }
 
 enum OrderType {
@@ -131,74 +214,80 @@ enum MessageType {
   SYSTEM
 }
 
-/* ─────────────────────────────
-   USER MODEL
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * USER MODEL
+ * ──────────────────────────────
+ */
 model User {
-  id            String    @id @default(uuid())
-  googleId      String?   @unique
-  firstName     String
-  middleName    String?   @default("")
-  lastName      String
-  dob           DateTime?
-  email         String    @unique
-  phone         String?   @unique
-  password      String
-  homeTown      String?   @default("Not mentioned yet.")
-  currentCity   String?   @default("Not mentioned yet.")
-  gender        Gender    @default(NOT_MENTIONED)
-  role          Role      @default(CLIENT)
-  isActive      Boolean   @default(true)
-  createdBy     String?   @default("")
-  updatedBy     String?   @default("")
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  deletedAt     DateTime?
-  profilePhoto  String?   @default("")
+  id           String    @id @default(uuid())
+  googleId     String?   @unique
+  firstName    String
+  middleName   String?   @default("")
+  lastName     String
+  dob          DateTime?
+  email        String    @unique
+  phone        String?   @unique
+  password     String
+  homeTown     String?   @default("Not mentioned yet.")
+  currentCity  String?   @default("Not mentioned yet.")
+  gender       Gender    @default(NOT_MENTIONED)
+  role         Role      @default(CLIENT)
+  isActive     Boolean   @default(true)
+  createdBy    String?   @default("")
+  updatedBy    String?   @default("")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+  profilePhoto String?   @default("")
 
   // Vendor/Agent specific profile (only populated when role = VENDOR)
   vendorProfile VendorProfile?
 
   // Relations
-  leadsAssigned     Lead[]           @relation("LeadAssignedTo")
-  leadsCreated      Lead[]           @relation("LeadCreatedBy")
-  orders            Order[]          @relation("OrderCustomer")
-  serviceRequests   ServiceRequest[] @relation("ServiceRequestCustomer")
-  complaints        Complaint[]      @relation("UserComplaints")
-  notifications     Notification[]   @relation("UserNotifications")
-  siteFeedbacks     SiteFeedback[]   @relation("UserSiteFeedbacks")
-  chatRooms         ChatRoomMember[] @relation("UserChatRooms")
-  messages          Message[]        @relation("UserMessages")
-  messageReads      MessageRead[]    @relation("UserMessageReads")
-  activityLogs      ActivityLog[]
-  chatbotSessions   ChatbotSession[]
+  leadsAssigned   Lead[]           @relation("LeadAssignedTo")
+  leadsCreated    Lead[]           @relation("LeadCreatedBy")
+  orders          Order[]          @relation("OrderCustomer")
+  serviceRequests ServiceRequest[] @relation("ServiceRequestCustomer")
+  complaints      Complaint[]      @relation("UserComplaints")
+  notifications   Notification[]   @relation("UserNotifications")
+  siteFeedbacks   SiteFeedback[]   @relation("UserSiteFeedbacks")
+  chatRooms       ChatRoomMember[] @relation("UserChatRooms")
+  messages        Message[]        @relation("UserMessages")
+  messageReads    MessageRead[]    @relation("UserMessageReads")
+  activityLogs    ActivityLog[]
+  chatbotSessions ChatbotSession[]
 }
 
-/* ─────────────────────────────
-   VENDOR / AGENT PROFILE
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * VENDOR / AGENT PROFILE
+ * ──────────────────────────────
+ */
 model VendorProfile {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  businessName    String?
-  designation     String?  // e.g. Agent, MR, ABC
-  isVerified      Boolean  @default(false)
-  currentLat      Float?
-  currentLng      Float?
-  serviceAddress  String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  businessName   String?
+  designation    String? // e.g. Agent, MR, ABC
+  isVerified     Boolean  @default(false)
+  currentLat     Float?
+  currentLng     Float?
+  serviceAddress String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   bankDetails     VendorBank[]
-  productsAdded   Product[]     @relation("VendorAddedProducts")
+  productsAdded   Product[]        @relation("VendorAddedProducts")
   servicesHandled ServiceRequest[] @relation("VendorServiceRequests")
-  ordersHandled   Order[]       @relation("VendorOrders")
+  ordersHandled   Order[]          @relation("VendorOrders")
 }
 
-/* ─────────────────────────────
-   VENDOR BANKING
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * VENDOR BANKING
+ * ──────────────────────────────
+ */
 model VendorBank {
   id              String   @id @default(uuid())
   vendorProfileId String
@@ -211,12 +300,174 @@ model VendorBank {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  vendorProfile   VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
+  vendorProfile VendorProfile @relation(fields: [vendorProfileId], references: [id], onDelete: Cascade)
 }
 
-/* ─────────────────────────────
-   PRODUCT CATALOG
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * VENDOR (standalone, Phase 1)
+ * Independent from `User` — vendor auth, KYC, wallet and lead work all
+ * hang off this entity per the vendor-first platform requirements.
+ * The older `User.role = VENDOR` / `VendorProfile` pair above is kept
+ * for backward compatibility but is no longer the vendor auth path.
+ * ──────────────────────────────
+ */
+model Vendor {
+  id                 String                   @id @default(uuid())
+  vendorCode         String                   @unique
+  role               VendorRole
+  fullName           String
+  phone              String                   @unique
+  phoneVerified      Boolean                  @default(false)
+  email              String?                  @unique
+  password           String
+  profilePhoto       String?
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  latitude           Float?
+  longitude          Float?
+  experienceYears    Int?
+  skills             String[]                 @default([])
+  specialization     String?
+  verificationStatus VendorVerificationStatus @default(PENDING)
+  profileStatus      VendorProfileStatus      @default(DRAFT)
+  rejectionReason    String?
+
+  // Referral-ready fields — no MLM logic yet, just the shape for later.
+  referralCode       String? @unique
+  referredByVendorId String?
+
+  // Soft-delete request flow: vendor requests -> admin approves -> deletedAt set.
+  deletionRequested Boolean   @default(false)
+  deletionReason    String?
+  deletedAt         DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  referredBy Vendor?  @relation("VendorReferrals", fields: [referredByVendorId], references: [id])
+  referrals  Vendor[] @relation("VendorReferrals")
+
+  kyc        VendorKYC?
+  bankDetail VendorBankDetail?
+  wallet     Wallet?
+
+  leadAssignments LeadAssignment[]
+  visitProofs     LeadVisitProof[]
+  denialProofs    LeadDenialProof[]
+  progressLogs    LeadProgress[]
+  commissions     Commission[]
+  complaints      VendorComplaint[]
+  offerRewards    OfferReward[]
+  payments        Payment[]
+  reviews         Review[]
+  notifications   Notification[]
+
+  assignedLeads Lead[] @relation("LeadAssignments")
+}
+
+model VendorKYC {
+  id                String   @id @default(uuid())
+  vendorId          String   @unique
+  aadhaarNumber     String?
+  aadhaarFrontImage String?
+  aadhaarBackImage  String?
+  panNumber         String?
+  panImage          String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model VendorBankDetail {
+  id          String   @id @default(uuid())
+  vendorId    String   @unique
+  bankAccount String
+  ifsc        String
+  upiId       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+}
+
+model VendorOtp {
+  id         String     @id @default(cuid())
+  identifier String     // phone or email
+  code       String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  used       Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+
+  @@index([identifier])
+}
+
+/**
+ * ─────────────────────────────
+ * WALLET
+ * ──────────────────────────────
+ */
+model Wallet {
+  id            String   @id @default(uuid())
+  vendorId      String   @unique
+  balance       Decimal  @default(0) @db.Decimal(12, 2) // 1 coin = ₹1
+  lockedBalance Decimal  @default(0) @db.Decimal(12, 2)
+  totalEarned   Decimal  @default(0) @db.Decimal(12, 2)
+  totalSpent    Decimal  @default(0) @db.Decimal(12, 2)
+  totalRecharge Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt     DateTime @updatedAt
+
+  vendor       Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  transactions WalletTransaction[]
+}
+
+model WalletTransaction {
+  id           String          @id @default(uuid())
+  walletId     String
+  type         WalletTxnType
+  status       WalletTxnStatus @default(PENDING)
+  amount       Decimal         @db.Decimal(12, 2)
+  balanceAfter Decimal?        @db.Decimal(12, 2)
+  referenceId  String? // leadId, orderId, paymentId, etc.
+  note         String?
+  createdAt    DateTime        @default(now())
+
+  wallet Wallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+
+  @@index([walletId, createdAt])
+}
+
+/**
+ * ─────────────────────────────
+ * REVIEWS / RATINGS
+ * Client rates a technician after a completed lead. 10+ ratings of 1-2
+ * stars trips an automatic temporary restriction (see Vendor.profileStatus
+ * = BLOCKED) until the vendor's local admin clears it.
+ * ──────────────────────────────
+ */
+model Review {
+  id        String   @id @default(uuid())
+  leadId    String   @unique // one review per completed lead
+  vendorId  String
+  rating    Int // 1-5
+  comment   String?
+  createdAt DateTime @default(now())
+
+  lead   Lead   @relation(fields: [leadId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId, rating])
+}
+
+/**
+ * ─────────────────────────────
+ * PRODUCT CATALOG
+ * ──────────────────────────────
+ */
 model Product {
   id              String          @id @default(uuid())
   name            String
@@ -232,14 +483,16 @@ model Product {
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  addedByVendor   VendorProfile?  @relation("VendorAddedProducts", fields: [addedByVendorId], references: [id])
-  orderItems      OrderItem[]
-  leads           Lead[]
+  addedByVendor VendorProfile? @relation("VendorAddedProducts", fields: [addedByVendorId], references: [id])
+  orderItems    OrderItem[]
+  leads         Lead[]
 }
 
-/* ─────────────────────────────
-   SERVICE CATALOG
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * SERVICE CATALOG
+ * ──────────────────────────────
+ */
 model Service {
   id          String          @id @default(uuid())
   name        String
@@ -254,51 +507,158 @@ model Service {
   leads           Lead[]
 }
 
-/* ─────────────────────────────
-   LEAD MANAGEMENT
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * LEAD MANAGEMENT
+ * ──────────────────────────────
+ */
 model Lead {
-  id              String     @id @default(uuid())
-  customerName    String
-  phone           String
-  address         String?
-  source          LeadSource
-  status          LeadStatus @default(NEW)
-  productId       String?
-  serviceId       String?
-  assignedToId    String?    // vendor/agent/MR the lead is assigned to
-  createdById     String?    // user/admin/panel that created the lead
-  verifiedBySuperAdmin Boolean @default(false)
-  notes           String?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id                   String   @id @default(uuid())
+  customerName         String
+  phone                String
+  email                String?
+  address              String?
+  latitude             Float?
+  longitude            Float?
+  area                 String? // shown to technician pre-accept, in place of exact address
+  issue                String?
+  serviceType          String?
+  estimatedAmount      Decimal? @db.Decimal(10, 2)
+  leadAcceptanceCharge Decimal? @db.Decimal(10, 2) // coins deducted on accept (snapshot of config at accept time)
 
-  product         Product?   @relation(fields: [productId], references: [id])
-  service         Service?   @relation(fields: [serviceId], references: [id])
-  assignedTo      User?      @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
-  createdBy       User?      @relation("LeadCreatedBy", fields: [createdById], references: [id])
+  source               LeadSource
+  status               LeadStatus @default(NEW)
+  productId            String?
+  serviceId            String?
+  assignedToId         String? // legacy: user/MR the lead is assigned to
+  assignedVendorId     String? // current: vendor/technician the lead is assigned to
+  createdById          String? // user/admin/panel that created the lead
+  verifiedBySuperAdmin Boolean    @default(false)
+  notes                String?
+
+  acceptedAt      DateTime?
+  startVerifiedAt DateTime?
+  completedAt     DateTime?
+  deniedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  product        Product? @relation(fields: [productId], references: [id])
+  service        Service? @relation(fields: [serviceId], references: [id])
+  assignedTo     User?    @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
+  assignedVendor Vendor?  @relation("LeadAssignments", fields: [assignedVendorId], references: [id])
+  createdBy      User?    @relation("LeadCreatedBy", fields: [createdById], references: [id])
+
+  assignmentHistory LeadAssignment[]
+  visitProofs       LeadVisitProof[]
+  denialProofs      LeadDenialProof[]
+  progressLogs      LeadProgress[]
+  commission        Commission?
+  payments          Payment[]
+  review            Review?
 }
 
-/* ─────────────────────────────
-   ORDERS
-────────────────────────────── */
+/**
+ * Assignment/acceptance history — kept separate from Lead so re-assignment
+ * (e.g. after a rejection) doesn't lose the trail.
+ */
+model LeadAssignment {
+  id         String    @id @default(uuid())
+  leadId     String
+  vendorId   String
+  acceptedAt DateTime  @default(now())
+  rejectedAt DateTime?
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([leadId])
+  @@index([vendorId])
+}
+
+/**
+ * Proof captured when technician presses "Start Work" — GPS + image,
+ * held as PENDING_START_VERIFICATION until admin verifies.
+ */
+model LeadVisitProof {
+  id         String    @id @default(uuid())
+  leadId     String
+  vendorId   String
+  latitude   Float
+  longitude  Float
+  accuracy   Float?
+  image      String
+  capturedAt DateTime
+  verified   Boolean   @default(false)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * Proof captured when technician cannot complete the service — image +
+ * reason + GPS, held as PENDING_DENIAL_VERIFICATION until admin verifies.
+ */
+model LeadDenialProof {
+  id         String    @id @default(uuid())
+  leadId     String
+  vendorId   String
+  reason     String
+  image      String
+  latitude   Float
+  longitude  Float
+  capturedAt DateTime
+  approved   Boolean?
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * Free-form progress logs while a lead is ONGOING — images/notes/parts used.
+ */
+model LeadProgress {
+  id        String   @id @default(uuid())
+  leadId    String
+  vendorId  String
+  note      String?
+  images    String[] @default([])
+  partsUsed String[] @default([])
+  createdAt DateTime @default(now())
+
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@index([leadId, createdAt])
+}
+
+/**
+ * ─────────────────────────────
+ * ORDERS
+ * ──────────────────────────────
+ */
 model Order {
   id              String        @id @default(uuid())
   customerId      String
-  vendorId        String?       // vendor/agent handling the order
+  vendorId        String? // vendor/agent handling the order
   type            OrderType     @default(PRODUCT)
   status          OrderStatus   @default(PENDING)
   paymentStatus   PaymentStatus @default(PENDING)
   totalAmount     Decimal       @db.Decimal(10, 2)
   deliveryAddress String?
-  completionPhoto String?       // proof photo captured on completion
+  completionPhoto String? // proof photo captured on completion
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  customer        User          @relation("OrderCustomer", fields: [customerId], references: [id])
-  vendor          VendorProfile? @relation("VendorOrders", fields: [vendorId], references: [id])
-  items           OrderItem[]
-  payments        Payment[]
+  customer User           @relation("OrderCustomer", fields: [customerId], references: [id])
+  vendor   VendorProfile? @relation("VendorOrders", fields: [vendorId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
 }
 
 model OrderItem {
@@ -308,52 +668,150 @@ model OrderItem {
   quantity  Int     @default(1)
   price     Decimal @db.Decimal(10, 2)
 
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product   Product @relation(fields: [productId], references: [id])
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
 }
 
-/* ─────────────────────────────
-   SERVICE REQUESTS (installation / repair / AMC)
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * SERVICE REQUESTS (installation / repair / AMC)
+ * ──────────────────────────────
+ */
 model ServiceRequest {
-  id             String                @id @default(uuid())
-  customerId     String
-  vendorId       String?               // assigned technician/vendor
-  serviceId      String
-  status         ServiceRequestStatus  @default(REQUESTED)
-  scheduledAt    DateTime?
-  completedAt    DateTime?
-  notes          String?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  id          String               @id @default(uuid())
+  customerId  String
+  vendorId    String? // assigned technician/vendor
+  serviceId   String
+  status      ServiceRequestStatus @default(REQUESTED)
+  scheduledAt DateTime?
+  completedAt DateTime?
+  notes       String?
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
-  customer       User            @relation("ServiceRequestCustomer", fields: [customerId], references: [id])
-  vendor         VendorProfile?  @relation("VendorServiceRequests", fields: [vendorId], references: [id])
-  service        Service         @relation(fields: [serviceId], references: [id])
-  payments       Payment[]
+  customer User           @relation("ServiceRequestCustomer", fields: [customerId], references: [id])
+  vendor   VendorProfile? @relation("VendorServiceRequests", fields: [vendorId], references: [id])
+  service  Service        @relation(fields: [serviceId], references: [id])
+  payments Payment[]
 }
 
-/* ─────────────────────────────
-   PAYMENTS
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * PAYMENTS
+ * ──────────────────────────────
+ */
 model Payment {
   id               String        @id @default(uuid())
   orderId          String?
   serviceRequestId String?
+  leadId           String? // lead-completion QR payment
+  vendorId         String?
   amount           Decimal       @db.Decimal(10, 2)
   method           PaymentMethod
   status           PaymentStatus @default(PENDING)
   transactionId    String?       @unique
+  qrPayload        String? // demo QR payload; replaced by Razorpay order id later
+  reviewToken      String? @unique // given to the client on completion; required to submit a Review
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  order            Order?          @relation(fields: [orderId], references: [id])
-  serviceRequest   ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  order          Order?          @relation(fields: [orderId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  lead           Lead?           @relation(fields: [leadId], references: [id])
+  vendor         Vendor?         @relation(fields: [vendorId], references: [id])
 }
 
-/* ─────────────────────────────
-   COMPLAINTS / SUPPORT
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * COMMISSION (flat, phase 1 — referral fields exist on Vendor for a
+ * future multi-level engine, but no MLM logic is implemented yet)
+ * ──────────────────────────────
+ */
+model Commission {
+  id            String           @id @default(uuid())
+  leadId        String           @unique
+  vendorId      String
+  amount        Decimal          @db.Decimal(10, 2)
+  percentage    Decimal          @db.Decimal(5, 2)
+  transactionId String?
+  status        CommissionStatus @default(PENDING)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  lead   Lead   @relation(fields: [leadId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * ─────────────────────────────
+ * VENDOR COMPLAINTS (distinct from the client-facing Complaint model)
+ * ──────────────────────────────
+ */
+model VendorComplaint {
+  id          String                  @id @default(uuid())
+  vendorId    String
+  category    VendorComplaintCategory
+  subject     String
+  description String
+  status      VendorComplaintStatus   @default(OPEN)
+  adminReply  String?
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * ─────────────────────────────
+ * OFFERS (skeleton — reward catalog + per-vendor reward history)
+ * ──────────────────────────────
+ */
+model Offer {
+  id          String    @id @default(uuid())
+  title       String
+  description String?
+  type        OfferType
+  value       Decimal   @db.Decimal(10, 2)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  rewards OfferReward[]
+}
+
+model OfferReward {
+  id         String    @id @default(uuid())
+  offerId    String
+  vendorId   String
+  grantedAt  DateTime  @default(now())
+  redeemedAt DateTime?
+
+  offer  Offer  @relation(fields: [offerId], references: [id])
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+}
+
+/**
+ * ─────────────────────────────
+ * PARTS (skeleton — spare parts catalog, mirrors Product)
+ * ──────────────────────────────
+ */
+model Part {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      @default(0)
+  images      String[] @default([])
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/**
+ * ─────────────────────────────
+ * COMPLAINTS / SUPPORT
+ * ──────────────────────────────
+ */
 model Complaint {
   id          String          @id @default(uuid())
   userId      String
@@ -364,24 +822,31 @@ model Complaint {
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
-  user        User            @relation("UserComplaints", fields: [userId], references: [id])
+  user User @relation("UserComplaints", fields: [userId], references: [id])
 }
 
-/* ─────────────────────────────
-   OTP MODEL
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * OTP MODEL
+ * ──────────────────────────────
+ */
 model OtpCode {
   id        String   @id @default(cuid())
-  email     String
+  identifier String
+  purpose   String   @default("VERIFY") // SIGNUP | LOGIN | RESET_PASSWORD | VERIFY
   code      String
   expiresAt DateTime
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([identifier])
 }
 
-/* ─────────────────────────────
-   BLACKLISTED TOKEN MODEL
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * BLACKLISTED TOKEN MODEL
+ * ──────────────────────────────
+ */
 model BlacklistedToken {
   id        String   @id @default(cuid())
   token     String   @unique
@@ -389,24 +854,32 @@ model BlacklistedToken {
   createdAt DateTime @default(now())
 }
 
-/* ─────────────────────────────
-   NOTIFICATION SYSTEM
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * NOTIFICATION SYSTEM
+ * ──────────────────────────────
+ */
 model Notification {
   id        String   @id @default(uuid())
-  userId    String
+  userId    String?
+  vendorId  String?
   title     String
   message   String
   type      String   @default("Info")
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user      User     @relation("UserNotifications", fields: [userId], references: [id])
+  user   User?   @relation("UserNotifications", fields: [userId], references: [id])
+  vendor Vendor? @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, createdAt])
 }
 
-/* ─────────────────────────────
-   ACTIVITY LOG
-────────────────────────────── */
+/**
+ * ─────────────────────────────
+ * ACTIVITY LOG
+ * ──────────────────────────────
+ */
 model ActivityLog {
   id        String   @id @default(uuid())
   userId    String
@@ -414,12 +887,14 @@ model ActivityLog {
   meta      Json?
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 }
 
-/*─────────────────────────────
-   GENERAL SITE FEEDBACK
-──────────────────────────────*/
+/**
+ * ─────────────────────────────
+ * GENERAL SITE FEEDBACK
+ * ──────────────────────────────
+ */
 model SiteFeedback {
   id        String             @id @default(uuid())
   userId    String
@@ -432,20 +907,22 @@ model SiteFeedback {
   createdAt DateTime           @default(now())
   updatedAt DateTime           @updatedAt
 
-  user      User               @relation("UserSiteFeedbacks", fields: [userId], references: [id])
+  user User @relation("UserSiteFeedbacks", fields: [userId], references: [id])
 }
 
-/*─────────────────────────────
-   CHAT (customer <-> vendor / support)
-──────────────────────────────*/
+/**
+ * ─────────────────────────────
+ * CHAT (customer <-> vendor / support)
+ * ──────────────────────────────
+ */
 model ChatRoom {
   id        String   @id @default(uuid())
   type      ChatType @default(DIRECT)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  members   ChatRoomMember[]
-  messages  Message[]
+  members  ChatRoomMember[]
+  messages Message[]
 }
 
 model ChatRoomMember {
@@ -455,30 +932,30 @@ model ChatRoomMember {
   joinedAt   DateTime  @default(now())
   lastReadAt DateTime?
 
-  chatRoom   ChatRoom @relation(fields: [chatRoomId], references: [id])
-  user       User     @relation("UserChatRooms", fields: [userId], references: [id])
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id])
+  user     User     @relation("UserChatRooms", fields: [userId], references: [id])
 
   @@unique([chatRoomId, userId], name: "UniqueChatMember")
 }
 
 model Message {
-  id           String        @id @default(uuid())
+  id           String      @id @default(uuid())
   chatRoomId   String
   senderId     String
-  type         MessageType   @default(TEXT)
+  type         MessageType @default(TEXT)
   content      String?
   fileUrl      String?
   fileName     String?
   fileMimeType String?
   duration     Int?
-  isEdited     Boolean       @default(false)
-  isDeleted    Boolean       @default(false)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  isEdited     Boolean     @default(false)
+  isDeleted    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 
-  chatRoom     ChatRoom      @relation(fields: [chatRoomId], references: [id])
-  sender       User          @relation("UserMessages", fields: [senderId], references: [id])
-  readBy       MessageRead[]
+  chatRoom ChatRoom      @relation(fields: [chatRoomId], references: [id])
+  sender   User          @relation("UserMessages", fields: [senderId], references: [id])
+  readBy   MessageRead[]
 }
 
 model MessageRead {
@@ -487,15 +964,17 @@ model MessageRead {
   userId    String
   readAt    DateTime @default(now())
 
-  message   Message  @relation(fields: [messageId], references: [id])
-  user      User     @relation("UserMessageReads", fields: [userId], references: [id])
+  message Message @relation(fields: [messageId], references: [id])
+  user    User    @relation("UserMessageReads", fields: [userId], references: [id])
 
   @@unique([messageId, userId])
 }
 
-/*─────────────────────────────
-   AI CHATBOT / SUPPORT ASSISTANT
-──────────────────────────────*/
+/**
+ * ─────────────────────────────
+ * AI CHATBOT / SUPPORT ASSISTANT
+ * ──────────────────────────────
+ */
 model ChatbotSession {
   id        String   @id @default(uuid())
   userId    String
@@ -503,20 +982,20 @@ model ChatbotSession {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages  ChatbotMessage[]
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages ChatbotMessage[]
 
   @@index([userId, updatedAt])
 }
 
 model ChatbotMessage {
-  id        String         @id @default(uuid())
+  id        String   @id @default(uuid())
   sessionId String
   role      String // "user" | "bot"
   content   String
-  createdAt DateTime       @default(now())
+  createdAt DateTime @default(now())
 
-  session   ChatbotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session ChatbotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
 }

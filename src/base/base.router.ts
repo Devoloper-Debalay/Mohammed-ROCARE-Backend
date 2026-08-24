@@ -1,21 +1,15 @@
 import { Router } from "express";
-
+import vendorAuthRouter from "../modules/auth/vendor/vendor-auth.router";
+import vendorRouter from "../modules/vendor/vendor.router";
+import leadReviewRouter from "../modules/vendor/lead-review.public.router";
 
 const mainRouter = Router()
 
 // API Routes
-// mainRouter.use("/users", userRouter);
-// mainRouter.use("/auth", authRouter);
-// mainRouter.use("/mindmap", mindmapRouter);
-// mainRouter.use("/nlp", nlpRouter);
-// mainRouter.use("/rooms", roomRouter);
-// mainRouter.use("/teacher", teacherRouter);
-// mainRouter.use("/feedback", feedbackRouter);
-// mainRouter.use("/newsletter", newsletterRouter);
-// mainRouter.use("/admin", adminRouter);
-// mainRouter.use("/student", studentRouter);
-// mainRouter.use("/chat", chatRouter);
-// mainRouter.use("/chatbot", chatbotRouter);
-
+// Vendor module (Phase 1)
+mainRouter.use("/vendor/auth", vendorAuthRouter);
+mainRouter.use("/vendor", vendorRouter);
+// Public — client submits the review with the token from the completion QR, not a vendor token.
+mainRouter.use("/leads", leadReviewRouter);
 
 export default mainRouter
