@@ -152,8 +152,8 @@ export class VendorService {
   }
 
   /** Signup -> profile creation is complete; move DRAFT -> UNDER_REVIEW for admin. */
-  async submitForVerification(vendorId: string): Promise<VendorPublicProfile> {
-    const vendor = await this.getVendorOrThrow(vendorId);
+  async submitForVerification(vendorCode: string): Promise<VendorPublicProfile> {
+    const vendor = await this.getVendorOrThrowByCode(vendorCode);
 
     if (vendor.profileStatus !== VendorProfileStatus.DRAFT) {
       throw createHttpError(409, `Profile already submitted (status: ${vendor.profileStatus}).`);
@@ -162,14 +162,14 @@ export class VendorService {
       throw createHttpError(400, "Complete KYC and bank details before submitting for verification.");
     }
 
-    await this.vendorRepo.submitForVerification(vendorId);
+    await this.vendorRepo.submitForVerification(vendor.id);
 
     if (vendor.email) {
       const { subject, html } = submittedForReviewEmail(vendor.fullName);
       await sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
     }
 
-    return this.getProfile(vendorId);
+    return this.getProfile(vendor.id);
   }
 
   async requestAccountDeletion(vendorId: string, reason: string): Promise<void> {

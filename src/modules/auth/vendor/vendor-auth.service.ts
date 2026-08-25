@@ -13,10 +13,9 @@ import { OtpPurpose, VendorProfileStatus, VendorVerificationStatus } from "../..
 import { sendMail } from "../../../utils/mailer";
 import { vendorSmsService } from "./vendor-sms.service";
 import { normalizeVendorPhone } from "./vendor-phone.util";
-import { registrationReceivedEmail, passwordChangedEmail, otpEmail, loginSuccessEmail, otpEmailTemplate } from "../../../utils/vendorMailTemplates";
+import { registrationReceivedEmail, passwordChangedEmail, otpEmail, loginSuccessEmail } from "../../../utils/vendorMailTemplates";
 import { isEmail } from "class-validator";
 import { normalizeIdentifier } from "../../../utils/auth.util";
-import { randomInt } from "crypto";
 
 const SALT_ROUNDS = 10;
 

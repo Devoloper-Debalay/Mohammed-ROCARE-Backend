@@ -1,5 +1,5 @@
 import { injectable, inject } from "tsyringe";
-import type { PrismaClient } from "../../generated/prisma/client";
+import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { LeadStatus, VendorProfileStatus, VendorRole, VendorVerificationStatus } from "../../generated/prisma/enums";
 
 const PROFILE_INCLUDE = {
@@ -9,14 +9,20 @@ const PROFILE_INCLUDE = {
 
 @injectable()
 export class VendorRepository {
-  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) {}
+  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) { }
 
   findById(id: string) {
     return this.prisma.vendor.findUnique({ where: { id }, include: PROFILE_INCLUDE });
   }
 
-  findByVendorCode(vendorCode: string) {
-    return this.prisma.vendor.findUnique({ where: { vendorCode }, include: PROFILE_INCLUDE });
+  async findByVendorCode(vendorCode: string) {
+    return this.prisma.vendor.findUnique({
+      where: { vendorCode },
+      include: {
+        bankDetail: true,
+        kyc: true,
+      },
+    });
   }
 
   findByPhone(phone: string) {
@@ -58,11 +64,17 @@ export class VendorRepository {
     return this.prisma.vendor.update({ where: { id }, data: { password } });
   }
 
-  upsertKyc(vendorId: string, data: Record<string, unknown>) {
+  upsertKyc(
+    vendorId: string,
+    data: Omit<Prisma.VendorKYCUncheckedCreateInput, "vendorId">
+  ) {
     return this.prisma.vendorKYC.upsert({
       where: { vendorId },
       update: data,
-      create: { vendorId, ...data },
+      create: {
+        vendorId,
+        ...data,
+      },
     });
   }
 
