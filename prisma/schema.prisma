@@ -175,9 +175,13 @@ enum PaymentMethod {
 
 enum ServiceRequestStatus {
   REQUESTED
+  NEW
   ASSIGNED
+  ACCEPTED
   IN_PROGRESS
+  ONGOING
   COMPLETED
+  DENIED
   CANCELLED
 }
 
@@ -242,7 +246,9 @@ model User {
   profilePhoto String?   @default("")
 
   // Vendor/Agent specific profile (only populated when role = VENDOR)
-  vendorProfile VendorProfile?
+  vendorProfile  VendorProfile?
+  adminProfile   AdminProfile? //Admin Profile
+  customerProfile Customer?
 
   // Relations
   leadsAssigned   Lead[]           @relation("LeadAssignedTo")
@@ -257,6 +263,44 @@ model User {
   messageReads    MessageRead[]    @relation("UserMessageReads")
   activityLogs    ActivityLog[]
   chatbotSessions ChatbotSession[]
+}
+
+/**
+ * ─────────────────────────────
+ * ADMIN ORGANISATION / BRANCH SCOPE
+ * ──────────────────────────────
+ */
+model Branch {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  city      String
+  state     String
+  pincode   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  admins          AdminProfile[]
+  vendors         Vendor[]
+  products        Product[]
+  services        Service[]
+  leads           Lead[]
+  orders          Order[]
+  serviceRequests ServiceRequest[]
+  inventory       Inventory[]
+}
+
+model AdminProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  branchId  String?
+  jobTitle  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch? @relation(fields: [branchId], references: [id])
 }
 
 /**
@@ -343,6 +387,7 @@ model Vendor {
   deletionRequested Boolean   @default(false)
   deletionReason    String?
   deletedAt         DateTime?
+  branchId          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -360,12 +405,15 @@ model Vendor {
   progressLogs    LeadProgress[]
   commissions     Commission[]
   complaints      VendorComplaint[]
+  walletIssues    WalletIssue[]
+  notifications   Notification[]    @relation("VendorNotifications")
   offerRewards    OfferReward[]
   payments        Payment[]
   reviews         Review[]
-  notifications   Notification[]
 
-  assignedLeads Lead[] @relation("LeadAssignments")
+  assignedLeads   Lead[]           @relation("LeadAssignments")
+  serviceRequests ServiceRequest[] @relation("ServiceRequestAssignedVendor")
+  branch          Branch?          @relation(fields: [branchId], references: [id])
 }
 
 model VendorKYC {
@@ -396,7 +444,7 @@ model VendorBankDetail {
 
 model VendorOtp {
   id         String     @id @default(cuid())
-  identifier String     // phone or email
+  identifier String // phone or email
   code       String
   purpose    OtpPurpose
   expiresAt  DateTime
@@ -469,6 +517,7 @@ model Review {
  * ──────────────────────────────
  */
 model Product {
+  branchId        String?
   id              String          @id @default(uuid())
   name            String
   category        ProductCategory
@@ -484,8 +533,10 @@ model Product {
   updatedAt       DateTime        @updatedAt
 
   addedByVendor VendorProfile? @relation("VendorAddedProducts", fields: [addedByVendorId], references: [id])
+  branch        Branch?        @relation(fields: [branchId], references: [id])
   orderItems    OrderItem[]
   leads         Lead[]
+  inventory     Inventory?
 }
 
 /**
@@ -494,6 +545,7 @@ model Product {
  * ──────────────────────────────
  */
 model Service {
+  branchId    String?
   id          String          @id @default(uuid())
   name        String
   category    ServiceCategory
@@ -504,6 +556,7 @@ model Service {
   updatedAt   DateTime        @updatedAt
 
   serviceRequests ServiceRequest[]
+  branch          Branch?          @relation(fields: [branchId], references: [id])
   leads           Lead[]
 }
 
@@ -513,6 +566,7 @@ model Service {
  * ──────────────────────────────
  */
 model Lead {
+  branchId             String?
   id                   String   @id @default(uuid())
   customerName         String
   phone                String
@@ -557,6 +611,7 @@ model Lead {
   commission        Commission?
   payments          Payment[]
   review            Review?
+  branch            Branch?           @relation(fields: [branchId], references: [id])
 }
 
 /**
@@ -643,6 +698,7 @@ model LeadProgress {
  * ──────────────────────────────
  */
 model Order {
+  branchId        String?
   id              String        @id @default(uuid())
   customerId      String
   vendorId        String? // vendor/agent handling the order
@@ -659,6 +715,7 @@ model Order {
   vendor   VendorProfile? @relation("VendorOrders", fields: [vendorId], references: [id])
   items    OrderItem[]
   payments Payment[]
+  branch   Branch?        @relation(fields: [branchId], references: [id])
 }
 
 model OrderItem {
@@ -678,21 +735,32 @@ model OrderItem {
  * ──────────────────────────────
  */
 model ServiceRequest {
-  id          String               @id @default(uuid())
-  customerId  String
-  vendorId    String? // assigned technician/vendor
-  serviceId   String
-  status      ServiceRequestStatus @default(REQUESTED)
-  scheduledAt DateTime?
-  completedAt DateTime?
-  notes       String?
-  createdAt   DateTime             @default(now())
-  updatedAt   DateTime             @updatedAt
+  branchId         String?
+  id               String               @id @default(uuid())
+  customerId       String
+  vendorId         String? // legacy VendorProfile assignment
+  assignedVendorId String?
+  serviceId        String
+  status           ServiceRequestStatus @default(NEW)
+  priority         Int                  @default(0)
+  scheduledAt      DateTime?
+  acceptedAt       DateTime?
+  completedAt      DateTime?
+  deniedAt         DateTime?
+  cancelledAt      DateTime?
+  notes            String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
-  customer User           @relation("ServiceRequestCustomer", fields: [customerId], references: [id])
-  vendor   VendorProfile? @relation("VendorServiceRequests", fields: [vendorId], references: [id])
-  service  Service        @relation(fields: [serviceId], references: [id])
-  payments Payment[]
+  customer       User           @relation("ServiceRequestCustomer", fields: [customerId], references: [id])
+  vendor         VendorProfile? @relation("VendorServiceRequests", fields: [vendorId], references: [id])
+  assignedVendor Vendor?        @relation("ServiceRequestAssignedVendor", fields: [assignedVendorId], references: [id])
+  service        Service        @relation(fields: [serviceId], references: [id])
+  payments       Payment[]
+  branch         Branch?        @relation(fields: [branchId], references: [id])
+
+  @@index([customerId, createdAt])
+  @@index([assignedVendorId, status])
 }
 
 /**
@@ -711,7 +779,7 @@ model Payment {
   status           PaymentStatus @default(PENDING)
   transactionId    String?       @unique
   qrPayload        String? // demo QR payload; replaced by Razorpay order id later
-  reviewToken      String? @unique // given to the client on completion; required to submit a Review
+  reviewToken      String?       @unique // given to the client on completion; required to submit a Review
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
@@ -796,15 +864,16 @@ model OfferReward {
  * ──────────────────────────────
  */
 model Part {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   name        String
   description String?
-  price       Decimal  @db.Decimal(10, 2)
-  stock       Int      @default(0)
-  images      String[] @default([])
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  price       Decimal    @db.Decimal(10, 2)
+  stock       Int        @default(0)
+  images      String[]   @default([])
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  inventory   Inventory?
 }
 
 /**
@@ -831,13 +900,13 @@ model Complaint {
  * ──────────────────────────────
  */
 model OtpCode {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   identifier String
-  purpose   String   @default("VERIFY") // SIGNUP | LOGIN | RESET_PASSWORD | VERIFY
-  code      String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+  purpose    String   @default("VERIFY") // SIGNUP | LOGIN | RESET_PASSWORD | VERIFY
+  code       String
+  expiresAt  DateTime
+  used       Boolean  @default(false)
+  createdAt  DateTime @default(now())
 
   @@index([identifier])
 }
@@ -870,9 +939,24 @@ model Notification {
   createdAt DateTime @default(now())
 
   user   User?   @relation("UserNotifications", fields: [userId], references: [id])
-  vendor Vendor? @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  vendor Vendor? @relation("VendorNotifications", fields: [vendorId], references: [id], onDelete: Cascade)
 
+  @@index([userId, createdAt])
   @@index([vendorId, createdAt])
+}
+
+/**
+ * ─────────────────────────────
+ * SYSTEM SETTINGS (SUPER ADMIN ONLY)
+ * ──────────────────────────────
+ */
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 /**
@@ -998,4 +1082,157 @@ model ChatbotMessage {
   session ChatbotSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId, createdAt])
+}
+
+/**
+ * ─────────────────────────────
+ * PHASE 2 CUSTOMER / PLATFORM MODELS
+ * ──────────────────────────────
+ */
+model Customer {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  phoneVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses CustomerAddress[]
+}
+
+model CustomerAddress {
+  id         String   @id @default(uuid())
+  customerId String
+  label      String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  pincode    String
+  latitude   Float?
+  longitude  Float?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, isDefault])
+}
+
+model PaymentWebhook {
+  id          String    @id @default(uuid())
+  provider    String
+  eventId     String    @unique
+  signature   String?
+  payload     Json
+  processed   Boolean   @default(false)
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([provider, createdAt])
+}
+
+model WalletIssue {
+  id          String                @id @default(uuid())
+  vendorId    String
+  subject     String
+  description String
+  status      VendorComplaintStatus @default(OPEN)
+  resolution  String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, createdAt])
+}
+
+model Coupon {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  description    String?
+  discountType   String // PERCENT | FIXED
+  discountValue  Decimal   @db.Decimal(10, 2)
+  maxDiscount    Decimal?  @db.Decimal(10, 2)
+  minOrderAmount Decimal?  @db.Decimal(10, 2)
+  usageLimit     Int?
+  usageCount     Int       @default(0)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([isActive, expiresAt])
+}
+
+model Voucher {
+  id         String    @id @default(uuid())
+  code       String    @unique
+  title      String
+  amount     Decimal   @db.Decimal(10, 2)
+  expiresAt  DateTime?
+  isRedeemed Boolean   @default(false)
+  redeemedAt DateTime?
+  customerId String?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId, isRedeemed])
+}
+
+model Inventory {
+  id           String   @id @default(uuid())
+  productId    String?  @unique
+  partId       String?  @unique
+  branchId     String?
+  quantity     Int      @default(0)
+  reserved     Int      @default(0)
+  reorderLevel Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  product Product? @relation(fields: [productId], references: [id])
+  part    Part?    @relation(fields: [partId], references: [id])
+  branch  Branch?  @relation(fields: [branchId], references: [id])
+
+  transactions InventoryTransaction[]
+}
+
+model InventoryTransaction {
+  id          String   @id @default(uuid())
+  inventoryId String
+  type        String // IN | OUT | ADJUSTMENT | RESERVE | RELEASE
+  quantity    Int
+  referenceId String?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  inventory Inventory @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId, createdAt])
+}
+
+model PlatformSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorType  String
+  actorId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorType, actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
 }

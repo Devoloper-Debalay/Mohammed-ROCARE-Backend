@@ -1,0 +1,3 @@
+import {IsEnum,IsISO8601,IsNumber,IsOptional,IsString,Min} from "class-validator";
+export class CouponDto{ @IsString() code!:string; @IsOptional() @IsString() description?:string; @IsEnum(["PERCENT","FIXED"] as any) discountType!:any; @IsNumber() @Min(0) discountValue!:number; @IsOptional() @IsNumber() maxDiscount?:number; @IsOptional() @IsNumber() minOrderAmount?:number; @IsOptional() usageLimit?:number; @IsOptional() @IsISO8601() startsAt?:string; @IsOptional() @IsISO8601() expiresAt?:string; }
+export class VoucherDto{ @IsString() code!:string; @IsString() title!:string; @IsNumber() @Min(0) amount!:number; @IsOptional() @IsISO8601() expiresAt?:string; @IsOptional() customerId?:string; }

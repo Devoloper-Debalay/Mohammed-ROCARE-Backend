@@ -1,0 +1,2 @@
+import {Router} from "express";import "../../container";import {container} from "tsyringe";import {ServiceRequestController} from "./service-request.controller";import {requireCustomerAuth} from "../customer/customer.middleware";import {dtoValidation} from "../../middlewares/dtoValidation";import {CreateServiceRequestDto} from "./service-request.dto";
+const r=Router(),c=container.resolve(ServiceRequestController);r.use(requireCustomerAuth);r.post("/",dtoValidation(CreateServiceRequestDto),c.create);r.get("/",c.mine);r.get("/:id",c.detail);export default r;

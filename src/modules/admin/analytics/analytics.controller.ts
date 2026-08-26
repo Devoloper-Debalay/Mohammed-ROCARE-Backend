@@ -1,0 +1,3 @@
+import { injectable, inject } from "tsyringe"; import { Request, Response, NextFunction } from "express"; import { AnalyticsService } from "./analytics.service"; 
+import { sendSuccess } from "../../../shared/response";
+@injectable() export class AnalyticsController { constructor(@inject(AnalyticsService) private readonly s: AnalyticsService) { } dashboard = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.dashboard(), "Dashboard.") } catch (e) { next(e) } }; trends = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.trends(), "Analytics.") } catch (e) { next(e) } }; }

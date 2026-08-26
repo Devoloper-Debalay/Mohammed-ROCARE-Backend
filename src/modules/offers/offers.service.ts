@@ -1,0 +1,7 @@
+import {injectable} from "tsyringe";import createHttpError from "http-errors";import prisma from "../../config/database";
+@injectable() export class OffersService{
+ coupons(){return prisma.coupon.findMany({where:{isActive:true},orderBy:{createdAt:"desc"}});}createCoupon(d:any){return prisma.coupon.create({data:d});}updateCoupon(id:string,d:any){return prisma.coupon.update({where:{id},data:d});}
+ vouchers(){return prisma.voucher.findMany({orderBy:{createdAt:"desc"}});}createVoucher(d:any){return prisma.voucher.create({data:d});}
+ async applyCoupon(code:string,amount:number){const c=await prisma.coupon.findUnique({where:{code}});const now=new Date();if(!c||!c.isActive||(c.startsAt&&c.startsAt>now)||(c.expiresAt&&c.expiresAt<now)||(c.usageLimit!==null&&c.usageCount>=c.usageLimit))throw createHttpError(400,"Coupon is invalid or expired.");if(c.minOrderAmount&&amount<Number(c.minOrderAmount))throw createHttpError(400,"Minimum order amount not met.");let discount=c.discountType==="PERCENT"?amount*Number(c.discountValue)/100:Number(c.discountValue);if(c.maxDiscount)discount=Math.min(discount,Number(c.maxDiscount));discount=Math.min(discount,amount);return {code:c.code,discount,finalAmount:amount-discount};}
+ async redeemVoucher(code:string,customerId:string){const v=await prisma.voucher.findUnique({where:{code}});if(!v||v.isRedeemed||(v.expiresAt&&v.expiresAt<new Date()))throw createHttpError(400,"Voucher is invalid or already redeemed.");return prisma.voucher.update({where:{id:v.id},data:{isRedeemed:true,redeemedAt:new Date(),customerId}});}
+}

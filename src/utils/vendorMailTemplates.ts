@@ -28,6 +28,19 @@ export function otpEmail(code: string, purpose: string): MailContent {
   };
 }
 
+export function adminWelcomeEmail(fullName: string, email: string, tempPassword: string, branchName?: string): MailContent {
+  return {
+    subject: "Your ROCARE Admin Account",
+    html: wrap(
+      "Admin Account Created",
+      `<p>Hi ${fullName},</p>
+       <p>An admin account has been created for you on ROCARE${branchName ? ` for the <b>${branchName}</b> branch` : ""}.</p>
+       <p>Login email: <b>${email}</b><br/>Temporary password: <b>${tempPassword}</b></p>
+       <p>Please log in and change your password as soon as possible.</p>`
+    ),
+  };
+}
+
 export function registrationReceivedEmail(fullName: string, vendorCode: string): MailContent {
   return {
     subject: "Welcome to ROCARE — Registration Received",

@@ -1,0 +1,20 @@
+import { Router } from "express";
+import "../../container";
+import { container } from "tsyringe";
+import { CustomerController } from "./customer.controller";
+import { dtoValidation } from "../../middlewares/dtoValidation";
+import { requireCustomerAuth } from "./customer.middleware";
+import { CustomerSignupDto, CustomerOtpDto, CustomerVerifyOtpDto, CustomerAddressDto } from "./customer.dto";
+
+const router = Router();
+const c = container.resolve(CustomerController);
+router.post("/auth/signup", dtoValidation(CustomerSignupDto), c.signup);
+router.post("/auth/login", dtoValidation(CustomerOtpDto), c.sendOtp);
+router.post("/auth/verify-otp", dtoValidation(CustomerVerifyOtpDto), c.verifyOtp);
+router.use(requireCustomerAuth);
+router.get("/profile", c.profile);
+router.get("/addresses", c.addresses);
+router.post("/addresses", dtoValidation(CustomerAddressDto), c.addAddress);
+router.patch("/addresses/:id", dtoValidation(CustomerAddressDto), c.updateAddress);
+router.delete("/addresses/:id", c.deleteAddress);
+export default router;
