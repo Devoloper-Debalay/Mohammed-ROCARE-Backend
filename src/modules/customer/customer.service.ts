@@ -38,6 +38,7 @@ export class CustomerService {
     if (existing) throw createHttpError(409, "A customer with this phone or email already exists.");
     const password = await bcrypt.hash(randomBytes(24).toString("hex"), 10);
     const user = await this.repo.createCustomer({ firstName: input.firstName, middleName: input.middleName || "", lastName: input.lastName, email: email || `${phone.replace(/\D/g,"")}@customer.rocare.local`, phone, password });
+    await prisma.customer.create({ data: { userId: user.id } });
     await this.issueOtp(phone, "SIGNUP");
     return { customerId: user.id, phone: user.phone, email: input.email, otpSent: true };
   }
@@ -57,7 +58,7 @@ export class CustomerService {
     const user = await this.repo.findUser(identifier);
     if (!user || user.role !== "CLIENT" || user.deletedAt) throw createHttpError(404, "Customer not found.");
     await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
-    if (purpose === "SIGNUP" && user.phone === identifier) await this.repo.updateUser(user.id, {});
+    if (purpose === "SIGNUP" && user.phone === identifier) await prisma.customer.update({ where: { userId: user.id }, data: { phoneVerified: true } });
     return { verified: true, accessToken: signCustomerAccessToken(user.id), customerId: user.id };
   }
 

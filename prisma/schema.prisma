@@ -254,6 +254,7 @@ model User {
   leadsAssigned   Lead[]           @relation("LeadAssignedTo")
   leadsCreated    Lead[]           @relation("LeadCreatedBy")
   orders          Order[]          @relation("OrderCustomer")
+  carts           Cart[]            @relation("UserCarts")
   serviceRequests ServiceRequest[] @relation("ServiceRequestCustomer")
   complaints      Complaint[]      @relation("UserComplaints")
   notifications   Notification[]   @relation("UserNotifications")
@@ -413,6 +414,10 @@ model Vendor {
 
   assignedLeads   Lead[]           @relation("LeadAssignments")
   serviceRequests ServiceRequest[] @relation("ServiceRequestAssignedVendor")
+  assignedOrders  Order[]          @relation("OrderAssignedVendor")
+  locations       VendorLocation[]
+  chatRooms       ChatRoomMember[]  @relation("VendorChatRooms")
+  sentMessages    Message[]         @relation("VendorMessages")
   branch          Branch?          @relation(fields: [branchId], references: [id])
 }
 
@@ -459,6 +464,19 @@ model VendorOtp {
  * WALLET
  * ──────────────────────────────
  */
+model VendorLocation {
+  id         String   @id @default(uuid())
+  vendorId   String
+  latitude   Float
+  longitude  Float
+  accuracy   Float?
+  capturedAt DateTime @default(now())
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([vendorId, capturedAt])
+}
+
 model Wallet {
   id            String   @id @default(uuid())
   vendorId      String   @unique
@@ -535,6 +553,7 @@ model Product {
   addedByVendor VendorProfile? @relation("VendorAddedProducts", fields: [addedByVendorId], references: [id])
   branch        Branch?        @relation(fields: [branchId], references: [id])
   orderItems    OrderItem[]
+  cartItems     CartItem[]
   leads         Lead[]
   inventory     Inventory?
 }
@@ -697,11 +716,38 @@ model LeadProgress {
  * ORDERS
  * ──────────────────────────────
  */
+model Cart {
+  id        String     @id @default(uuid())
+  userId    String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  user  User       @relation("UserCarts", fields: [userId], references: [id], onDelete: Cascade)
+  items CartItem[]
+
+  @@unique([userId])
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cart    Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([cartId, productId])
+}
+
 model Order {
   branchId        String?
   id              String        @id @default(uuid())
   customerId      String
-  vendorId        String? // vendor/agent handling the order
+  vendorId        String? // legacy VendorProfile handling the order
+  assignedVendorId String? // current standalone Vendor handling the order
   type            OrderType     @default(PRODUCT)
   status          OrderStatus   @default(PENDING)
   paymentStatus   PaymentStatus @default(PENDING)
@@ -716,6 +762,7 @@ model Order {
   items    OrderItem[]
   payments Payment[]
   branch   Branch?        @relation(fields: [branchId], references: [id])
+  assignedVendor Vendor? @relation("OrderAssignedVendor", fields: [assignedVendorId], references: [id])
 }
 
 model OrderItem {
@@ -888,6 +935,7 @@ model Complaint {
   description String
   status      ComplaintStatus @default(OPEN)
   resolvedBy  String?
+  adminReply  String?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -1012,20 +1060,24 @@ model ChatRoom {
 model ChatRoomMember {
   id         String    @id @default(uuid())
   chatRoomId String
-  userId     String
+  userId     String?
+  vendorId   String?
   joinedAt   DateTime  @default(now())
   lastReadAt DateTime?
 
-  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id])
-  user     User     @relation("UserChatRooms", fields: [userId], references: [id])
+  chatRoom ChatRoom @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  user     User?    @relation("UserChatRooms", fields: [userId], references: [id], onDelete: Cascade)
+  vendor   Vendor?  @relation("VendorChatRooms", fields: [vendorId], references: [id], onDelete: Cascade)
 
-  @@unique([chatRoomId, userId], name: "UniqueChatMember")
+  @@unique([chatRoomId, userId], name: "UniqueChatUserMember")
+  @@unique([chatRoomId, vendorId], name: "UniqueChatVendorMember")
 }
 
 model Message {
   id           String      @id @default(uuid())
   chatRoomId   String
-  senderId     String
+  senderId     String?
+  senderVendorId String?
   type         MessageType @default(TEXT)
   content      String?
   fileUrl      String?
@@ -1038,7 +1090,8 @@ model Message {
   updatedAt    DateTime    @updatedAt
 
   chatRoom ChatRoom      @relation(fields: [chatRoomId], references: [id])
-  sender   User          @relation("UserMessages", fields: [senderId], references: [id])
+  sender       User?   @relation("UserMessages", fields: [senderId], references: [id])
+  senderVendor Vendor? @relation("VendorMessages", fields: [senderVendorId], references: [id])
   readBy   MessageRead[]
 }
 

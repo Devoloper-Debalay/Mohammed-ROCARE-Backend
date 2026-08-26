@@ -1,7 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcrypt";
-import { Role } from "../../generated/prisma/enums";
-import prisma from "../../config/database";
+import { Role } from "../generated/prisma/enums";
+import prisma from "../config/database";
 
 function required(name: string): string {
   const value = process.env[name]?.trim();

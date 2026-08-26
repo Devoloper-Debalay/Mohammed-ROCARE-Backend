@@ -84,7 +84,7 @@ export const ChatService = {
     cursor?: string
   ) {
     const isMember = await prisma.chatRoomMember.findUnique({
-      where: { UniqueChatMember: { chatRoomId, userId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId } },
     });
     if (!isMember)
       throw createHttpError(403, "You are not a member of this chat room.");
@@ -115,7 +115,7 @@ export const ChatService = {
     content: string
   ) {
     const isMember = await prisma.chatRoomMember.findUnique({
-      where: { UniqueChatMember: { chatRoomId, userId: senderId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId: senderId } },
     });
     if (!isMember)
       throw createHttpError(403, "You are not a member of this chat room.");
@@ -145,7 +145,7 @@ export const ChatService = {
     duration?: number // for voice messages
   ) {
     const isMember = await prisma.chatRoomMember.findUnique({
-      where: { UniqueChatMember: { chatRoomId, userId: senderId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId: senderId } },
     });
     if (!isMember)
       throw createHttpError(403, "You are not a member of this chat room.");
@@ -261,7 +261,7 @@ export const ChatService = {
   // ── Mark messages as read (specific ids, or all unread if none given) ──────
   async markMessagesRead(userId: string, chatRoomId: string, messageIds?: string[]) {
     const member = await prisma.chatRoomMember.findUnique({
-      where: { UniqueChatMember: { chatRoomId, userId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId } },
     });
     if (!member) throw createHttpError(403, "You are not a member of this chat room.");
 
@@ -289,7 +289,7 @@ export const ChatService = {
     }
 
     await prisma.chatRoomMember.update({
-      where: { UniqueChatMember: { chatRoomId, userId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId } },
       data: { lastReadAt: new Date() },
     });
 
@@ -299,7 +299,7 @@ export const ChatService = {
   // ── Get unread count ───────────────────────────────────────────────────────
   async getUnreadCount(userId: string, chatRoomId: string) {
     const member = await prisma.chatRoomMember.findUnique({
-      where: { UniqueChatMember: { chatRoomId, userId } },
+      where: { UniqueChatUserMember: { chatRoomId, userId } },
     });
 
     if (!member) throw createHttpError(403, "Not a member of this room.");
