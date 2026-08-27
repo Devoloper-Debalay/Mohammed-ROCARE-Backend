@@ -72,6 +72,37 @@ export class VendorService {
     return vendor;
   }
 
+  private async getVendorOrThrowById(vendorId: string) {
+    const vendor = await this.vendorRepo.findById(vendorId);
+    if (!vendor) throw createHttpError(404, "Vendor not found.");
+    return vendor;
+  }
+
+  async updateProfileByVendorId(vendorId: string, data: Record<string, unknown>) {
+    const vendor = await this.getVendorOrThrowById(vendorId);
+    return this.updateProfile(vendor.vendorCode, data);
+  }
+
+  async updateBankDetailByVendorId(vendorId: string, data: { bankAccount?: string; ifsc?: string; upiId?: string }) {
+    const vendor = await this.getVendorOrThrowById(vendorId);
+    return this.updateBankDetail(vendor.vendorCode, data);
+  }
+
+  async updateKycByVendorId(vendorId: string, data: { aadhaarNumber?: string; panNumber?: string }, files: { aadhaarFront?: Buffer; aadhaarBack?: Buffer; pan?: Buffer }) {
+    const vendor = await this.getVendorOrThrowById(vendorId);
+    return this.updateKyc(vendor.vendorCode, data, files);
+  }
+
+  async uploadProfilePhotoByVendorId(vendorId: string, fileBuffer: Buffer) {
+    const vendor = await this.getVendorOrThrowById(vendorId);
+    return this.uploadProfilePhoto(vendor.vendorCode, fileBuffer);
+  }
+
+  async submitForVerificationByVendorId(vendorId: string) {
+    const vendor = await this.getVendorOrThrowById(vendorId);
+    return this.submitForVerification(vendor.vendorCode);
+  }
+
   private async getVendorOrThrowByCode(vendorCode: string) {
     const vendor = await this.vendorRepo.findByVendorCode(vendorCode);
 

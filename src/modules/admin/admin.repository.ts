@@ -5,7 +5,7 @@ import { LeadStatus, OrderStatus, Role, VendorProfileStatus, VendorVerificationS
 
 @injectable()
 export class AdminRepository {
-  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) {}
+  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) { }
 
   findUser(id: string) {
     return this.prisma.user.findUnique({ where: { id }, include: { adminProfile: { include: { branch: true } } } });
@@ -13,6 +13,19 @@ export class AdminRepository {
 
   findUserByEmail(email: string) {
     return this.prisma.user.findUnique({ where: { email }, include: { adminProfile: { include: { branch: true } } } });
+  }
+
+  findUserById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: {
+        adminProfile: {
+          include: {
+            branch: true,
+          },
+        },
+      },
+    });
   }
 
   listUsers(skip: number, take: number) {
@@ -56,13 +69,44 @@ export class AdminRepository {
     return this.prisma.user.findFirst({ where: { id, role: { in: [Role.ADMIN, Role.SADMIN] }, deletedAt: null }, include: { adminProfile: { include: { branch: true } } } });
   }
 
-  async updateAdminRole(id: string, role: Role, updatedBy: string) {
-    return this.prisma.$transaction(async tx => {
-      const user = await tx.user.update({ where: { id }, data: { role, updatedBy } });
+  async updateUserRole(
+    id: string,
+    role: Role,
+    updatedBy: string
+  ) {
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id },
+        data: {
+          role,
+          updatedBy,
+        },
+      });
+
       if (role === Role.ADMIN || role === Role.SADMIN) {
-        await tx.adminProfile.upsert({ where: { userId: id }, update: {}, create: { userId: id } });
+        await tx.adminProfile.upsert({
+          where: { userId: id },
+          update: {},
+          create: {
+            userId: id,
+          },
+        });
+      } else {
+        await tx.adminProfile.deleteMany({
+          where: { userId: id },
+        });
       }
-      return tx.user.findUnique({ where: { id }, include: { adminProfile: { include: { branch: true } } } });
+
+      return tx.user.findUnique({
+        where: { id },
+        include: {
+          adminProfile: {
+            include: {
+              branch: true,
+            },
+          },
+        },
+      });
     });
   }
 

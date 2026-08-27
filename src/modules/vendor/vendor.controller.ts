@@ -27,92 +27,39 @@ export class VendorController {
 
   updateProfile = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { vendorCode, ...profileData } = req.body;
-
-      if (!vendorCode) {
-        throw createHttpError(400, "vendorCode is required.");
-      }
-
-      const profile = await this.vendorService.updateProfile(
-        vendorCode,
-        profileData
-      );
-
+      const { vendorCode: _ignoredVendorCode, ...profileData } = req.body;
+      const profile = await this.vendorService.updateProfileByVendorId(getVendorId(req), profileData);
       sendSuccess(res, profile, "Vendor profile updated.");
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   };
 
   updateBankDetail = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { vendorCode, bankAccount, ifsc, upiId } = req.body;
-
-      if (!vendorCode) {
-        throw createHttpError(400, "vendorCode is required.");
-      }
-
-      const profile = await this.vendorService.updateBankDetail(vendorCode, {
-        bankAccount,
-        ifsc,
-        upiId,
-      });
-
+      const { vendorCode: _ignoredVendorCode, bankAccount, ifsc, upiId } = req.body;
+      const profile = await this.vendorService.updateBankDetailByVendorId(getVendorId(req), { bankAccount, ifsc, upiId });
       sendSuccess(res, profile, "Bank details updated.");
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   };
 
   updateKyc = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { vendorCode, aadhaarNumber, panNumber } = req.body;
-
-      if (!vendorCode) {
-        throw createHttpError(400, "vendorCode is required.");
-      }
-
-      const files = req.files as {
-        [field: string]: Express.Multer.File[];
-      };
-
-      const profile = await this.vendorService.updateKyc(
-        vendorCode,
-        { aadhaarNumber, panNumber },
-        {
-          aadhaarFront: files?.aadhaarFront?.[0]?.buffer,
-          aadhaarBack: files?.aadhaarBack?.[0]?.buffer,
-          pan: files?.pan?.[0]?.buffer,
-        }
-      );
-
+      const { vendorCode: _ignoredVendorCode, aadhaarNumber, panNumber } = req.body;
+      const files = req.files as { [field: string]: Express.Multer.File[] };
+      const profile = await this.vendorService.updateKycByVendorId(getVendorId(req), { aadhaarNumber, panNumber }, {
+        aadhaarFront: files?.aadhaarFront?.[0]?.buffer,
+        aadhaarBack: files?.aadhaarBack?.[0]?.buffer,
+        pan: files?.pan?.[0]?.buffer,
+      });
       sendSuccess(res, profile, "KYC updated.");
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   };
 
   uploadProfilePhoto = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const vendorCode = req.body.vendorCode;
-
-      if (!vendorCode) {
-        throw createHttpError(400, "vendorCode is required.");
-      }
-
-      if (!req.file) {
-        throw createHttpError(400, "file is required.");
-      }
-
-      const profile = await this.vendorService.uploadProfilePhoto(
-        vendorCode,
-        req.file.buffer
-      );
-
+      if (!req.file) throw createHttpError(400, "file is required.");
+      const profile = await this.vendorService.uploadProfilePhotoByVendorId(getVendorId(req), req.file.buffer);
       sendSuccess(res, profile, "Profile photo uploaded.");
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   };
   changePassword = async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -127,18 +74,9 @@ export class VendorController {
 
   submitForVerification = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { vendorCode } = req.body;
-
-      if (!vendorCode) {
-        throw createHttpError(400, "vendorCode is required.");
-      }
-
-      const profile = await this.vendorService.submitForVerification(vendorCode);
-
+      const profile = await this.vendorService.submitForVerificationByVendorId(getVendorId(req));
       sendSuccess(res, profile, "Profile submitted for admin verification.");
-    } catch (err) {
-      next(err);
-    }
+    } catch (err) { next(err); }
   };
 
   requestAccountDeletion = async (req: Request, res: Response, next: NextFunction) => {

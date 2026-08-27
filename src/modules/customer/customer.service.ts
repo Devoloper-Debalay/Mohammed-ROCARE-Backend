@@ -16,7 +16,7 @@ const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 
 @injectable()
 export class CustomerService {
-  constructor(@inject(CustomerRepository) private readonly repo: CustomerRepository) {}
+  constructor(@inject(CustomerRepository) private readonly repo: CustomerRepository) { }
 
   private async issueOtp(identifier: string, purpose: "SIGNUP" | "LOGIN") {
     const code = String(randomInt(100000, 1000000));
@@ -34,13 +34,41 @@ export class CustomerService {
   async signup(input: any) {
     const phone = normalizeVendorPhone(input.phone);
     const email = input.email?.trim().toLowerCase();
-    const existing = await this.repo.findUser(phone) || (email ? await this.repo.findUser(email) : null);
-    if (existing) throw createHttpError(409, "A customer with this phone or email already exists.");
-    const password = await bcrypt.hash(randomBytes(24).toString("hex"), 10);
-    const user = await this.repo.createCustomer({ firstName: input.firstName, middleName: input.middleName || "", lastName: input.lastName, email: email || `${phone.replace(/\D/g,"")}@customer.rocare.local`, phone, password });
-    await prisma.customer.create({ data: { userId: user.id } });
+
+    const existing =
+      await this.repo.findUser(phone) ||
+      (email ? await this.repo.findUser(email) : null);
+
+    if (existing) {
+      throw createHttpError(
+        409,
+        "A customer with this phone or email already exists."
+      );
+    }
+
+    const password = await bcrypt.hash(
+      randomBytes(24).toString("hex"),
+      10
+    );
+
+    const user = await this.repo.createCustomer({
+      firstName: input.firstName,
+      middleName: input.middleName || "",
+      lastName: input.lastName,
+      email:
+        email || `${phone.replace(/\D/g, "")}@customer.rocare.local`,
+      phone,
+      password,
+    });
+
     await this.issueOtp(phone, "SIGNUP");
-    return { customerId: user.id, phone: user.phone, email: input.email, otpSent: true };
+
+    return {
+      customerId: user.id,
+      phone: user.phone,
+      email: input.email,
+      otpSent: true,
+    };
   }
 
   async sendOtp(identifierInput: string, purpose: "SIGNUP" | "LOGIN") {

@@ -53,7 +53,7 @@ router.patch("/complaints/:complaintId", dtoValidation(ComplaintReplyDto), contr
 router.use("/super", requireAdminRole(Role.SADMIN));
 router.get("/super/users", controller.users);
 router.get("/super/admins", controller.admins);
-router.get("/super/audit-logs", dtoValidation(AuditLogQueryDto), controller.auditLogs);
+router.get("/super/audit-logs", controller.auditLogs);
 router.patch("/super/users/:userId/status", dtoValidation(UserStatusDto), controller.updateUserStatus);
 router.patch("/super/users/:userId/role", dtoValidation(UserRoleDto), controller.updateUserRole);
 router.post("/super/admins", dtoValidation(CreateAdminDto), controller.createAdmin);

@@ -13,7 +13,7 @@ const DEFAULT_COMMISSION_PERCENT = 10;
 
 @injectable()
 export class AdminService {
-  constructor(@inject(AdminRepository) private readonly repo: AdminRepository) {}
+  constructor(@inject(AdminRepository) private readonly repo: AdminRepository) { }
 
 
   async context(userId: string) {
@@ -24,8 +24,9 @@ export class AdminService {
     return user;
   }
 
-  private branchFilter(role: Role, branchId: string | null | undefined, requested?: string) {
-    if (role === Role.SADMIN) return requested ? { branchId: requested } : {};
+  /** SADMIN is always global. ADMIN is always locked to its assigned branch. */
+  private branchFilter(role: Role, branchId: string | null | undefined) {
+    if (role === Role.SADMIN) return {};
     if (!branchId) throw createHttpError(403, "Admin branch is not configured.");
     return { branchId };
   }
@@ -62,11 +63,22 @@ export class AdminService {
 
   async assignVendorBranch(userId: string, vendorId: string, branchId: string) {
     await this.context(userId);
-    return this.repo.updateVendor(vendorId, { branchId });
+    const user = await this.requireSuperAdmin(userId);
+    const vendor = await this.repo.findVendor(vendorId);
+    if (!vendor) throw createHttpError(404, "Vendor not found.");
+    const branch = await this.repo.findBranch(branchId);
+    if (!branch || !branch.isActive) throw createHttpError(400, "The selected branch is invalid or inactive.");
+    const updated = await this.repo.updateVendor(vendorId, { branchId });
+    await this.audit(user.id, "VENDOR_BRANCH_CHANGED", "Vendor", vendorId, { branchId });
+    return updated;
   }
 
   async leads(userId: string, page: number, limit: number, branchId?: string) {
-    const user = await this.context(userId); const where = this.branchFilter(user.role, user.adminProfile?.branchId, branchId);
+    const user = await this.context(userId);
+    // SADMIN is global by default; an explicit branchId is only a deliberate filter.
+    const where = user.role === Role.SADMIN
+      ? (branchId ? { branchId } : {})
+      : this.branchFilter(user.role, user.adminProfile?.branchId);
     const [data, total] = await Promise.all([this.repo.listLeads(where, (page - 1) * limit, limit), this.repo.countLeads(where)]);
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
@@ -226,7 +238,10 @@ export class AdminService {
   async updateProduct(userId: string, id: string, data: Prisma.ProductUncheckedUpdateInput) {
     const user = await this.context(userId); const existing = await this.repo.listProducts({ id }, 0, 1); if (!existing[0]) throw createHttpError(404, "Product not found.");
     if (user.role === Role.ADMIN && existing[0].branchId !== user.adminProfile?.branchId) throw createHttpError(403, "Product is outside your branch.");
-    return this.repo.updateProduct(id, data);
+    const safeData = user.role === Role.ADMIN
+      ? (() => { const { branchId: _branchId, ...rest } = data as any; return rest; })()
+      : data;
+    return this.repo.updateProduct(id, safeData);
   }
 
   async services(userId: string, page: number, limit: number) { const user = await this.context(userId); const where = this.branchFilter(user.role, user.adminProfile?.branchId); const [data, total] = await Promise.all([this.repo.listServices(where, (page - 1) * limit, limit), this.repo.countServices(where)]); return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } }; }
@@ -240,7 +255,10 @@ export class AdminService {
   async updateService(userId: string, id: string, data: Prisma.ServiceUncheckedUpdateInput) {
     const user = await this.context(userId); const existing = await this.repo.listServices({ id }, 0, 1); if (!existing[0]) throw createHttpError(404, "Service not found.");
     if (user.role === Role.ADMIN && existing[0].branchId !== user.adminProfile?.branchId) throw createHttpError(403, "Service is outside your branch.");
-    return this.repo.updateService(id, data);
+    const safeData = user.role === Role.ADMIN
+      ? (() => { const { branchId: _branchId, ...rest } = data as any; return rest; })()
+      : data;
+    return this.repo.updateService(id, safeData);
   }
 
   async complaints(userId: string, page: number, limit: number) {
@@ -264,8 +282,51 @@ export class AdminService {
   async updateUserStatus(userId: string, targetId: string, isActive: boolean) { await this.requireSuperAdmin(userId); if (userId === targetId) throw createHttpError(400, "You cannot deactivate your own account."); return this.repo.updateUser(targetId, { isActive, updatedBy: userId }); }
 
   async updateUserRole(userId: string, targetId: string, role: Role) {
-    if (role !== Role.ADMIN && role !== Role.SADMIN) throw createHttpError(400, "User role can only be changed to ADMIN or SADMIN here.");
-    return this.changeAdminRole(userId, targetId, role);
+    await this.requireSuperAdmin(userId);
+
+    if (!Object.values(Role).includes(role)) {
+      throw createHttpError(400, "Invalid user role.");
+    }
+
+    if (targetId === userId && role !== Role.SADMIN) {
+      throw createHttpError(400, "You cannot demote your own account.");
+    }
+
+    const target = await this.repo.findUserById(targetId);
+
+    if (!target) {
+      throw createHttpError(404, "User not found.");
+    }
+
+    if (
+      target.role === Role.SADMIN &&
+      role !== Role.SADMIN &&
+      (await this.repo.countSuperAdmins()) <= 1
+    ) {
+      throw createHttpError(
+        409,
+        "At least one Super Admin must remain."
+      );
+    }
+
+    const updated = await this.repo.updateUserRole(
+      targetId,
+      role,
+      userId
+    );
+
+    await this.audit(
+      userId,
+      "USER_ROLE_CHANGED",
+      "User",
+      targetId,
+      {
+        from: target.role,
+        to: role,
+      }
+    );
+
+    return updated;
   }
 
   async createAdmin(userId: string, data: { firstName: string; lastName: string; email: string; phone?: string; password?: string; branchId?: string; jobTitle?: string }) {
@@ -322,7 +383,7 @@ export class AdminService {
     if (target.role === Role.SADMIN && role === Role.ADMIN && (await this.repo.countSuperAdmins()) <= 1) {
       throw createHttpError(409, "At least one Super Admin must remain.");
     }
-    const updated = await this.repo.updateAdminRole(targetId, role, userId);
+    const updated = await this.repo.updateUserRole(targetId, role, userId);
     await this.audit(userId, "ADMIN_ROLE_CHANGED", "User", targetId, { from: target.role, to: role });
     return updated;
   }
