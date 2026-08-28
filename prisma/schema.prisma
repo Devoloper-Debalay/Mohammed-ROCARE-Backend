@@ -603,6 +603,7 @@ model Lead {
   status               LeadStatus @default(NEW)
   productId            String?
   serviceId            String?
+  serviceRequestId     String?  @unique
   assignedToId         String? // legacy: user/MR the lead is assigned to
   assignedVendorId     String? // current: vendor/technician the lead is assigned to
   createdById          String? // user/admin/panel that created the lead
@@ -619,6 +620,7 @@ model Lead {
 
   product        Product? @relation(fields: [productId], references: [id])
   service        Service? @relation(fields: [serviceId], references: [id])
+  serviceRequest ServiceRequest? @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
   assignedTo     User?    @relation("LeadAssignedTo", fields: [assignedToId], references: [id])
   assignedVendor Vendor?  @relation("LeadAssignments", fields: [assignedVendorId], references: [id])
   createdBy      User?    @relation("LeadCreatedBy", fields: [createdById], references: [id])
@@ -805,6 +807,7 @@ model ServiceRequest {
   service        Service        @relation(fields: [serviceId], references: [id])
   payments       Payment[]
   branch         Branch?        @relation(fields: [branchId], references: [id])
+  lead           Lead?          @relation
 
   @@index([customerId, createdAt])
   @@index([assignedVendorId, status])

@@ -45,10 +45,11 @@ export class VendorSignupDto {
 }
 
 export class VendorLoginDto {
+  /** Email address or phone number. */
   @Expose()
   @IsString()
-  @IsNotEmpty({ message: "phone is required." })
-  phone!: string;
+  @IsNotEmpty({ message: "Email or phone is required." })
+  identifier!: string;
 
   @Expose()
   @IsString()
@@ -59,11 +60,18 @@ export class VendorLoginDto {
 export class SendOtpDto {
   @Expose()
   @IsString()
-  @IsNotEmpty({ message: "phone is required." })
-  phone!: string;
+  @IsNotEmpty({
+    message: "Email or phone is required.",
+  })
+  identifier!: string;
 
   @Expose()
-  @IsIn(["SIGNUP", "LOGIN", "RESET_PASSWORD"], { message: "invalid purpose." })
+  @IsIn(
+    ["SIGNUP", "LOGIN", "RESET_PASSWORD"],
+    {
+      message: "invalid purpose.",
+    }
+  )
   purpose!: "SIGNUP" | "LOGIN" | "RESET_PASSWORD";
 }
 

@@ -280,16 +280,31 @@ export class VendorAuthService {
     };
   }
 
-  async login(inputPhone: string, password: string) {
-    const phone = normalizeVendorPhone(inputPhone);
-    const vendor = await this.vendorRepo.findByPhone(phone);
-    if (!vendor || vendor.deletedAt) throw createHttpError(401, "Invalid phone or password.");
-    if (!vendor.phoneVerified) throw createHttpError(403, "Phone number is not verified. Please verify your phone first.");
+  async login(inputIdentifier: string, password: string) {
+    const identifier = normalizeIdentifier(inputIdentifier);
+
+    if (!identifier) {
+      throw createHttpError(400, "Email or phone is required.");
+    }
+
+    const vendor = await this.authRepo.findVendorByIdentifier(identifier);
+
+    // Keep the same generic error so callers cannot enumerate accounts.
+    if (!vendor || vendor.deletedAt) {
+      throw createHttpError(401, "Invalid email/phone or password.");
+    }
 
     const matches = await bcrypt.compare(password, vendor.password);
-    if (!matches) throw createHttpError(401, "Invalid phone or password.");
+    if (!matches) {
+      throw createHttpError(401, "Invalid email/phone or password.");
+    }
 
-    // Core rule from the signup flow: can't log in until verified + published.
+    // Phone verification is an account-verification rule, not a login-identifier rule.
+    // A vendor may log in with email after the account's phone has been verified.
+    if (!vendor.phoneVerified) {
+      throw createHttpError(403, "Phone number is not verified. Please verify your phone first.");
+    }
+
     if (
       vendor.verificationStatus !== VendorVerificationStatus.VERIFIED ||
       vendor.profileStatus !== VendorProfileStatus.PUBLISHED
@@ -304,7 +319,10 @@ export class VendorAuthService {
     const refreshToken = signVendorRefreshToken(vendor.id, vendor.role);
 
     if (vendor.email) {
-      const { subject, html } = loginSuccessEmail(vendor.fullName, "PASSWORD");
+      const { subject, html } = loginSuccessEmail(
+        vendor.fullName,
+        isEmail(identifier) ? "PASSWORD" : "PHONE_OTP"
+      );
       await sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
     }
 

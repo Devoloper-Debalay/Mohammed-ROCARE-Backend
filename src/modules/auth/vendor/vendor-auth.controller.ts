@@ -17,11 +17,25 @@ export class VendorAuthController {
     }
   };
 
-  sendOtp = async (req: Request, res: Response, next: NextFunction) => {
+  sendOtp = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
-      const { phone, purpose } = req.body;
-      const result = await this.authService.sendOtp(phone, purpose);
-      sendSuccess(res, result, "OTP sent.");
+      const { identifier, purpose } = req.body;
+
+      const result =
+        await this.authService.sendOtp(
+          identifier,
+          purpose
+        );
+
+      sendSuccess(
+        res,
+        result,
+        "OTP sent."
+      );
     } catch (err) {
       next(err);
     }
@@ -45,8 +59,8 @@ export class VendorAuthController {
 
   login = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { phone, password } = req.body;
-      const result = await this.authService.login(phone, password);
+      const { identifier, password } = req.body;
+      const result = await this.authService.login(identifier, password);
       sendSuccess(res, result, "Login successful.");
     } catch (err) {
       next(err);

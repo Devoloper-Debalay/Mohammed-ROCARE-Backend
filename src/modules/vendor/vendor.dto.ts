@@ -1,4 +1,4 @@
-import { Expose } from "class-transformer";
+import { Expose, Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -152,10 +152,42 @@ export class AdminWalletAdjustmentDto {
   @Expose() @IsOptional() @IsString() note?: string;
 }
 export class LeadActionDto {
-  @Expose() @IsOptional() @IsNumber() latitude?: number;
-  @Expose() @IsOptional() @IsNumber() longitude?: number;
-  @Expose() @IsOptional() @IsNumber() accuracy?: number;
-  @Expose() @IsOptional() @IsString() reason?: string;
+  @Expose()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: "latitude must be a valid number" },
+  )
+  @Min(-90)
+  @Max(90)
+  latitude?: number;
+
+  @Expose()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: "longitude must be a valid number" },
+  )
+  @Min(-180)
+  @Max(180)
+  longitude?: number;
+
+  @Expose()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: "accuracy must be a valid number" },
+  )
+  @Min(0)
+  accuracy?: number;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  reason?: string;
 }
 export class ReviewDto {
   @Expose() @IsString() @IsNotEmpty() reviewToken!: string;

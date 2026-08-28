@@ -1,17 +1,25 @@
-import axios from "axios";
+import nodemailer from "nodemailer";
 
-const BREVO_API_URL = "https://api.brevo.com/v3/smtp/email";
+const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
 
-const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const SMTP_PORT = Number(
+  process.env.SMTP_PORT || 465
+);
+
+const SMTP_SECURE =
+  process.env.SMTP_SECURE === "true";
+
+const SMTP_USER = process.env.SMTP_FROM_EMAIL || process.env.SMTP_USER;
+
+const SMTP_PASS = process.env.SMTP_PASS;
 
 const FROM_EMAIL =
-  process.env.BREVO_FROM_EMAIL ||
-  process.env.MAIL_FROM ||
-  "no-reply@rocare.com";
+  process.env.SMTP_FROM_EMAIL ||
+  SMTP_USER ||
+  "noreply.rocare@gmail.com";
 
 const FROM_NAME =
-  process.env.BREVO_FROM_NAME ||
-  process.env.MAIL_FROM_NAME ||
+  process.env.SMTP_FROM_NAME ||
   "ROCARE";
 
 export interface SendMailInput {
@@ -21,11 +29,60 @@ export interface SendMailInput {
   text?: string;
 }
 
-// Warn during startup, but don't crash the application.
-if (!BREVO_API_KEY) {
+if (!SMTP_USER || !SMTP_PASS) {
   console.warn(
-    "[mailer] BREVO_API_KEY is not set. Email sending will fail until it is configured."
+    "[mailer] Gmail SMTP is not fully configured. " +
+      "SMTP_USER and SMTP_PASS are required."
   );
+}
+
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+
+  port: SMTP_PORT,
+
+  secure: SMTP_SECURE,
+
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+});
+
+/**
+ * Optional SMTP connection verification.
+ *
+ * Call this during application startup if needed.
+ */
+export async function verifyMailer(): Promise<boolean> {
+  if (!SMTP_USER || !SMTP_PASS) {
+    console.warn(
+      "[mailer] SMTP verification skipped: configuration missing."
+    );
+
+    return false;
+  }
+
+  try {
+    await transporter.verify();
+
+    console.log(
+      "[mailer] Gmail SMTP connection verified successfully."
+    );
+
+    return true;
+  } catch (error: any) {
+    console.error(
+      "[mailer] Gmail SMTP verification failed:",
+      {
+        message: error?.message,
+        code: error?.code,
+        command: error?.command,
+      }
+    );
+
+    return false;
+  }
 }
 
 export async function sendMail({
@@ -37,16 +94,21 @@ export async function sendMail({
   success: boolean;
   error?: string;
 }> {
-  // Development fallback.
-  // Set MAILER_DEV_MODE=true to prevent real emails from being sent locally.
+  /**
+   * Development mode.
+   *
+   * Prevents actual email sending.
+   */
   if (
     process.env.NODE_ENV !== "production" &&
     process.env.MAILER_DEV_MODE === "true"
   ) {
     console.log(
-      `[mailer:dev] To: ${to} | Subject: ${subject}\n${
-        text ?? html.replace(/<[^>]+>/g, "")
-      }`
+      `[mailer:dev]
+To: ${to}
+Subject: ${subject}
+
+${text ?? html.replace(/<[^>]+>/g, "")}`
     );
 
     return {
@@ -54,48 +116,45 @@ export async function sendMail({
     };
   }
 
-  if (!BREVO_API_KEY) {
-    console.error("[mailer] BREVO_API_KEY is not configured.");
+  if (!SMTP_USER || !SMTP_PASS) {
+    const error =
+      "SMTP_USER or SMTP_PASS is not configured.";
+
+    console.error(`[mailer] ${error}`);
 
     return {
       success: false,
-      error: "BREVO_API_KEY is not configured",
+      error,
     };
   }
 
   try {
-    const response = await axios.post(
-      BREVO_API_URL,
-      {
-        sender: {
-          name: FROM_NAME,
-          email: FROM_EMAIL,
-        },
-        to: [
-          {
-            email: to,
-          },
-        ],
-        subject,
-        htmlContent: html,
-        textContent:
-          text ?? html.replace(/<[^>]+>/g, ""),
+    const info = await transporter.sendMail({
+      from: {
+        name: FROM_NAME,
+        address: FROM_EMAIL,
       },
-      {
-        headers: {
-          accept: "application/json",
-          "api-key": BREVO_API_KEY,
-          "content-type": "application/json",
-        },
-        timeout: 15_000,
-      }
-    );
 
-    const messageId =
-      response.data?.messageId ?? "unknown";
+      to,
+
+      subject,
+
+      html,
+
+      text:
+        text ??
+        html
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, "")
+          .replace(/\s+/g, " ")
+          .trim(),
+    });
 
     console.log(
-      `[mailer] Email accepted by Brevo | To: ${to} | MessageId: ${messageId}`
+      `[mailer] Email sent successfully | ` +
+        `To: ${to} | ` +
+        `MessageId: ${info.messageId}`
     );
 
     return {
@@ -103,20 +162,23 @@ export async function sendMail({
     };
   } catch (error: any) {
     const errorMessage =
-      error?.response?.data?.message ||
-      error?.response?.data?.code ||
+      error?.response ||
       error?.message ||
       "Unknown email sending error";
 
-    console.error("[mailer] Brevo send failed:", {
-      message: errorMessage,
-      status: error?.response?.status,
-      data: error?.response?.data,
-    });
+    console.error(
+      "[mailer] Nodemailer send failed:",
+      {
+        message: errorMessage,
+        code: error?.code,
+        command: error?.command,
+        responseCode: error?.responseCode,
+      }
+    );
 
     return {
       success: false,
-      error: errorMessage,
+      error: String(errorMessage),
     };
   }
 }

@@ -20,9 +20,7 @@ import orderRouter from "../modules/orders/order.router";
 import offersRouter from "../modules/offers/offers.router";
 
 // Service Requests
-import serviceRequestRouter from "../modules/service-request/service-request.router";
 import customerServiceRequestRouter from "../modules/service-request/customer-service-request.router";
-import vendorLeadsRouter from "../modules/service-request/vendor-leads.router";
 
 // Wallet / Payments
 import paymentRouter from "../modules/payment/payment.router";
@@ -40,13 +38,13 @@ import settingsRouter from "../modules/settings/settings.router";
 // Chat
 import chatRouter from "../chat/chat.router";
 import chatbotRouter from "../chatbot/chatbot.router";
+import { serviceRequestRouter } from "../modules/module-index";
 
 const mainRouter = Router();
 
 /* ---------------- Vendor ---------------- */
 mainRouter.use("/vendor/auth", vendorAuthRouter);
 mainRouter.use("/vendor", vendorRouter);
-mainRouter.use("/vendor/leads", vendorLeadsRouter);
 
 /* Public Lead Review */
 mainRouter.use("/leads", leadReviewRouter);

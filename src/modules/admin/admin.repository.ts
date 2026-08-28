@@ -1,7 +1,7 @@
 import createHttpError from "http-errors";
 import { injectable, inject } from "tsyringe";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
-import { LeadStatus, OrderStatus, Role, VendorProfileStatus, VendorVerificationStatus, VendorRole, WalletTxnStatus, WalletTxnType } from "../../generated/prisma/enums";
+import { LeadStatus, ServiceRequestStatus, OrderStatus, Role, VendorProfileStatus, VendorVerificationStatus, VendorRole, WalletTxnStatus, WalletTxnType } from "../../generated/prisma/enums";
 
 @injectable()
 export class AdminRepository {
@@ -179,10 +179,9 @@ export class AdminRepository {
       const proof = await tx.leadVisitProof.findUnique({ where: { id } });
       if (!proof) throw createHttpError(404, "Start proof not found.");
       await tx.leadVisitProof.update({ where: { id }, data: { verified: approved, verifiedAt: new Date() } });
-      return tx.lead.update({
-        where: { id: proof.leadId },
-        data: { status: approved ? LeadStatus.ONGOING : LeadStatus.ACCEPTED, ...(approved ? { startVerifiedAt: new Date() } : {}) },
-      });
+      const updated = await tx.lead.update({ where: { id: proof.leadId }, data: { status: approved ? LeadStatus.ONGOING : LeadStatus.ACCEPTED, ...(approved ? { startVerifiedAt: new Date() } : {}) } });
+      if (updated.serviceRequestId) await tx.serviceRequest.update({ where: { id: updated.serviceRequestId }, data: { status: approved ? ServiceRequestStatus.ONGOING : ServiceRequestStatus.ACCEPTED, ...(approved ? {} : {}) } });
+      return updated;
     });
   }
 
@@ -210,7 +209,9 @@ export class AdminRepository {
           data: { walletId: wallet.id, type: WalletTxnType.LEAD_REFUND, status: WalletTxnStatus.SUCCESS, amount: refund, balanceAfter: balance, referenceId: lead.id, note: "Approved lead denial refund" },
         });
       }
-      return tx.lead.update({ where: { id: lead.id }, data: { status: LeadStatus.DENIED, deniedAt: new Date() } });
+      const updated = await tx.lead.update({ where: { id: lead.id }, data: { status: LeadStatus.DENIED, deniedAt: new Date() } });
+      if (updated.serviceRequestId) await tx.serviceRequest.update({ where: { id: updated.serviceRequestId }, data: { status: ServiceRequestStatus.DENIED, deniedAt: updated.deniedAt } });
+      return updated;
     });
   }
 

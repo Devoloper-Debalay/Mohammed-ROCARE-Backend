@@ -5,7 +5,7 @@ import createHttpError from "http-errors";
 import { VendorRepository } from "./vendor.repository";
 import { uploadVendorDocument } from "../../utils/uploadVendorDocument";
 import { ProofInput, VendorPublicProfile } from "./vendor.types";
-import { CommissionStatus, LeadStatus, OfferType, PaymentMethod, PaymentStatus, VendorComplaintCategory, VendorComplaintStatus, VendorProfileStatus, VendorRole, WalletTxnStatus, WalletTxnType } from "../../generated/prisma/enums";
+import { CommissionStatus, LeadStatus, ServiceRequestStatus, OfferType, PaymentMethod, PaymentStatus, VendorComplaintCategory, VendorComplaintStatus, VendorProfileStatus, VendorRole, WalletTxnStatus, WalletTxnType } from "../../generated/prisma/enums";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { sendMail } from "../../utils/mailer";
 import {
@@ -85,7 +85,14 @@ export class VendorService {
 
   async updateBankDetailByVendorId(vendorId: string, data: { bankAccount?: string; ifsc?: string; upiId?: string }) {
     const vendor = await this.getVendorOrThrowById(vendorId);
-    return this.updateBankDetail(vendor.vendorCode, data);
+    if (data.bankAccount === undefined || data.ifsc === undefined) {
+      throw createHttpError(400, "Bank account and IFSC are required.");
+    }
+    return this.updateBankDetail(vendor.vendorCode, {
+      bankAccount: data.bankAccount,
+      ifsc: data.ifsc,
+      upiId: data.upiId,
+    });
   }
 
   async updateKycByVendorId(vendorId: string, data: { aadhaarNumber?: string; panNumber?: string }, files: { aadhaarFront?: Buffer; aadhaarBack?: Buffer; pan?: Buffer }) {
@@ -255,11 +262,11 @@ export class VendorService {
   }
 
   async leadDetail(vendorId: string, leadId: string) {
-    const lead = await this.vendorRepo.lead(leadId);
-    if (!lead || lead.assignedVendorId !== vendorId) throw createHttpError(404, "Lead not found.");
-    if (lead.status === LeadStatus.NEW) {
-      return { ...lead, phone: "**********", email: null, address: null, latitude: null, longitude: null };
-    }
+    const [lead, vendor] = await Promise.all([this.vendorRepo.lead(leadId), this.prisma.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true } })]);
+    if (!lead) throw createHttpError(404, "Lead not found.");
+    const isOpenForVendor = lead.status === LeadStatus.NEW && !lead.assignedVendorId && !!vendor?.branchId && lead.branchId === vendor.branchId;
+    if (lead.assignedVendorId !== vendorId && !isOpenForVendor) throw createHttpError(404, "Lead not found.");
+    if (isOpenForVendor) return { ...lead, phone: "**********", email: null, address: null, latitude: null, longitude: null };
     return lead;
   }
 
@@ -273,17 +280,24 @@ export class VendorService {
   async acceptLead(vendorId: string, leadId: string) {
     await this.assertTechnician(vendorId);
     return this.prisma.$transaction(async (tx) => {
-      const lead = await tx.lead.findUnique({ where: { id: leadId } });
-      if (!lead || lead.assignedVendorId !== vendorId) throw createHttpError(404, "Lead not found.");
-      if (lead.status !== LeadStatus.NEW) throw createHttpError(409, `Lead cannot be accepted from ${lead.status}.`);
+      const [lead, vendor] = await Promise.all([
+        tx.lead.findUnique({ where: { id: leadId } }),
+        tx.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true } }),
+      ]);
+      if (!lead) throw createHttpError(404, "Lead not found.");
+      if (lead.status !== LeadStatus.NEW || lead.assignedVendorId) throw createHttpError(409, "This lead is no longer available.");
+      if (!vendor?.branchId || lead.branchId !== vendor.branchId) throw createHttpError(403, "Lead is outside your branch.");
       const charge = lead.leadAcceptanceCharge?.toNumber() ?? DEFAULT_LEAD_CHARGE;
       const wallet = await tx.wallet.findUnique({ where: { vendorId } });
       if (!wallet || wallet.balance.lt(charge)) throw createHttpError(402, "INSUFFICIENT_WALLET_BALANCE");
+      const claimed = await tx.lead.updateMany({ where: { id: leadId, status: LeadStatus.NEW, assignedVendorId: null }, data: { assignedVendorId: vendorId, status: LeadStatus.ACCEPTED, acceptedAt: new Date(), leadAcceptanceCharge: charge } });
+      if (claimed.count !== 1) throw createHttpError(409, "This lead was just purchased by another vendor.");
       const balance = wallet.balance.minus(charge);
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance, totalSpent: wallet.totalSpent.plus(charge) } });
-      await tx.walletTransaction.create({ data: { walletId: wallet.id, type: WalletTxnType.LEAD_ACCEPT, status: WalletTxnStatus.SUCCESS, amount: charge, balanceAfter: balance, referenceId: leadId, note: "Lead acceptance charge" } });
-      const updated = await tx.lead.update({ where: { id: leadId }, data: { status: LeadStatus.ACCEPTED, acceptedAt: new Date(), leadAcceptanceCharge: charge } });
+      await tx.walletTransaction.create({ data: { walletId: wallet.id, type: WalletTxnType.LEAD_ACCEPT, status: WalletTxnStatus.SUCCESS, amount: charge, balanceAfter: balance, referenceId: leadId, note: "Lead purchase charge" } });
       await tx.leadAssignment.create({ data: { leadId, vendorId } });
+      const updated = await tx.lead.findUniqueOrThrow({ where: { id: leadId } });
+      if (updated.serviceRequestId) await tx.serviceRequest.update({ where: { id: updated.serviceRequestId }, data: { assignedVendorId: vendorId, status: ServiceRequestStatus.ACCEPTED, acceptedAt: updated.acceptedAt } });
       return updated;
     }).then(async (lead) => { await this.notify(vendorId, "Lead accepted", `Lead ${lead.id} has been accepted.`, "LEAD_ACCEPTED"); return lead; });
   }
@@ -436,6 +450,9 @@ export class VendorService {
           completedAt: new Date(),
         },
       });
+      if (lead.serviceRequestId) {
+        await tx.serviceRequest.update({ where: { id: lead.serviceRequestId }, data: { assignedVendorId: payment.vendorId, status: ServiceRequestStatus.COMPLETED, completedAt: lead.completedAt } });
+      }
 
       const percentage = Number(
         process.env.VENDOR_COMMISSION_PERCENT ?? DEFAULT_COMMISSION_PERCENT

@@ -1,6 +1,7 @@
 import { injectable, inject } from "tsyringe";
 import type { Prisma, PrismaClient } from "../../generated/prisma/client";
 import { LeadStatus, VendorProfileStatus, VendorRole, VendorVerificationStatus } from "../../generated/prisma/enums";
+import createHttpError from "http-errors";
 
 const PROFILE_INCLUDE = {
   kyc: true,
@@ -155,11 +156,146 @@ export class VendorRepository {
   }
   walletHistoryCount(vendorId: string) { return this.prisma.walletTransaction.count({ where: { wallet: { vendorId } } }); }
 
-  technicianLeads(vendorId: string, skip: number, take: number) {
-    return this.prisma.lead.findMany({ where: { assignedVendorId: vendorId }, orderBy: { createdAt: "desc" }, skip, take });
+  async technicianLeads(
+    vendorId: string,
+    skip: number,
+    take: number,
+  ) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        id: vendorId,
+      },
+      select: {
+        id: true,
+        branchId: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!vendor) {
+      throw createHttpError(404, "Vendor not found.");
+    }
+
+    if (vendor.deletedAt) {
+      throw createHttpError(
+        403,
+        "Vendor account is deleted.",
+      );
+    }
+
+    console.log("[LEAD DEBUG]", {
+      vendorId,
+      vendorBranchId: vendor.branchId,
+    });
+
+    const allNewLeads =
+      await this.prisma.lead.findMany({
+        where: {
+          status: LeadStatus.NEW,
+          assignedVendorId: null,
+        },
+
+        select: {
+          id: true,
+          branchId: true,
+          status: true,
+          assignedVendorId: true,
+          serviceRequestId: true,
+          createdAt: true,
+        },
+      });
+
+    console.log(
+      "[LEAD DEBUG] ALL NEW LEADS",
+      allNewLeads,
+    );
+
+    const where =
+      vendor.branchId
+        ? {
+          OR: [
+            {
+              assignedVendorId: vendorId,
+            },
+            {
+              status: LeadStatus.NEW,
+              assignedVendorId: null,
+              branchId: vendor.branchId,
+            },
+          ],
+        }
+        : {
+          assignedVendorId: vendorId,
+        };
+
+    return this.prisma.lead.findMany({
+      where,
+
+      include: {
+        serviceRequest: {
+          include: {
+            service: true,
+          },
+        },
+
+        assignmentHistory: true,
+
+        branch: true,
+      },
+
+      orderBy: {
+        createdAt: "desc",
+      },
+
+      skip,
+      take,
+    });
   }
-  technicianLeadCount(vendorId: string) { return this.prisma.lead.count({ where: { assignedVendorId: vendorId } }); }
-  lead(id: string) { return this.prisma.lead.findUnique({ where: { id }, include: { visitProofs: true, denialProofs: true, progressLogs: true, payments: true, review: true } }); }
+
+  async technicianLeadCount(
+    vendorId: string,
+  ) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: {
+        id: vendorId,
+      },
+
+      select: {
+        id: true,
+        branchId: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!vendor || vendor.deletedAt) {
+      return 0;
+    }
+
+    const where =
+      vendor.branchId
+        ? {
+          OR: [
+            {
+              assignedVendorId: vendorId,
+            },
+
+            {
+              status: LeadStatus.NEW,
+              assignedVendorId: null,
+              branchId: vendor.branchId,
+            },
+          ],
+        }
+        : {
+          assignedVendorId: vendorId,
+        };
+
+    return this.prisma.lead.count({
+      where,
+    });
+  }
+
+  lead(id: string) { return this.prisma.lead.findUnique({ where: { id }, include: { visitProofs: true, denialProofs: true, progressLogs: true, payments: true, review: true, serviceRequest: true } }); }
 
   notifications(vendorId: string, skip: number, take: number) {
     return this.prisma.notification.findMany({ where: { vendorId }, orderBy: { createdAt: "desc" }, skip, take });
