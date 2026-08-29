@@ -14,12 +14,11 @@ export class ProductsController {
     next: NextFunction,
   ) => {
     try {
+      const result = await this.s.catalogue();
+
       sendSuccess(
         res,
-        await this.s.catalogue(
-          Number(req.query.page) || 1,
-          Number(req.query.limit) || 20,
-        ),
+        result,
         "Service catalogue.",
       );
     } catch (e) {

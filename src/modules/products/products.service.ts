@@ -15,43 +15,16 @@ export class ProductsService {
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async catalogue(page = 1, limit = 20) {
-    const [data, total] = await Promise.all([
-      prisma.service.findMany({
-        where: {
-          isActive: true,
-        },
-
-        skip: (page - 1) * limit,
-        take: limit,
-
-        orderBy: {
-          createdAt: "desc",
-        },
-
-        include: {
-          branch: true,
-        },
-      }),
-
-      prisma.service.count({
-        where: {
-          isActive: true,
-        },
-      }),
-    ]);
-
-    return {
-      data,
-
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
-  }
+  async catalogue() {
+  return prisma.service.findMany({
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}
 
   async createProduct(data: any, scope: AdminScope) {
     const branchId = scope.role === Role.ADMIN ? scope.branchId : data.branchId;
