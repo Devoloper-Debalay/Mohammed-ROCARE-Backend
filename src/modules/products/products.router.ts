@@ -9,6 +9,7 @@ import { Role } from "../../generated/prisma/enums";
 const r = Router(), c = container.resolve(ProductsController);
 r.get("/products", c.products);
 r.get("/parts", c.parts);
+r.get("/catalogue", c.catalogue);
 r.use("/admin", requireAdminAuth, requireAdminRole(Role.ADMIN, Role.SADMIN));
 r.post("/admin/products", dtoValidation(ProductDto), c.createProduct);
 r.patch("/admin/products/:id", dtoValidation(ProductDto), c.updateProduct);

@@ -5,9 +5,27 @@ import { sendSuccess } from "../../shared/response";
 
 @injectable()
 export class ProductsController {
-  constructor(@inject(ProductsService) private readonly s: ProductsService) {}
+  constructor(@inject(ProductsService) private readonly s: ProductsService) { }
   private scope(res: Response) { return { role: res.locals.adminRole, branchId: res.locals.adminBranchId }; }
   products = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.products(Number(req.query.page) || 1, Number(req.query.limit) || 20), "Products."); } catch (e) { next(e); } };
+  catalogue = async (
+    req: Request,
+    res: Response,
+    next: NextFunction,
+  ) => {
+    try {
+      sendSuccess(
+        res,
+        await this.s.catalogue(
+          Number(req.query.page) || 1,
+          Number(req.query.limit) || 20,
+        ),
+        "Service catalogue.",
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
   createProduct = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.createProduct(req.body, this.scope(res)), "Product created.", 201); } catch (e) { next(e); } };
   updateProduct = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.updateProduct(req.params.id as string, req.body), "Product updated."); } catch (e) { next(e); } };
   parts = async (req: Request, res: Response, next: NextFunction) => { try { sendSuccess(res, await this.s.parts(Number(req.query.page) || 1, Number(req.query.limit) || 20), "Parts."); } catch (e) { next(e); } };
