@@ -11,6 +11,7 @@ import { otpEmail } from "../../utils/vendorMailTemplates";
 import { vendorSmsService } from "../auth/vendor/vendor-sms.service";
 import { createHash, randomInt, randomBytes } from "crypto";
 import prisma from "../../config/database";
+import { logActivity, sendMailSafe, simpleEmail } from "../../utils/serviceEvents";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 
@@ -62,6 +63,8 @@ export class CustomerService {
     });
 
     await this.issueOtp(phone, "SIGNUP");
+    await logActivity(user.id, "CUSTOMER_SIGNUP", { phone: user.phone, email: user.email });
+    if (email) await sendMailSafe({ to: email, subject: "Welcome to ROCARE", html: simpleEmail("Welcome to ROCARE", "Your customer account has been created successfully.") });
 
     return {
       customerId: user.id,
@@ -87,6 +90,8 @@ export class CustomerService {
     if (!user || user.role !== "CLIENT" || user.deletedAt) throw createHttpError(404, "Customer not found.");
     await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
     if (purpose === "SIGNUP" && user.phone === identifier) await prisma.customer.update({ where: { userId: user.id }, data: { phoneVerified: true } });
+    await logActivity(user.id, purpose === "LOGIN" ? "CUSTOMER_LOGIN_OTP" : "CUSTOMER_PHONE_VERIFIED", { channel: isEmail(identifier) ? "EMAIL" : "PHONE" });
+    if (purpose === "LOGIN") await sendMailSafe({ to: user.email, subject: "ROCARE login successful", html: simpleEmail("Login successful", "Your ROCARE customer account was accessed successfully.") });
     return { verified: true, accessToken: signCustomerAccessToken(user.id), customerId: user.id };
   }
 
