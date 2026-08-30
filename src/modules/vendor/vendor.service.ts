@@ -439,6 +439,7 @@ export class VendorService {
     const denyableStatuses: LeadStatus[] = [
       LeadStatus.ACCEPTED,
       LeadStatus.ONGOING,
+      LeadStatus.PENDING_START_VERIFICATION,
     ];
 
     return this.prisma.$transaction(async (tx) => {
