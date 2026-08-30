@@ -23,6 +23,51 @@ export const DEFAULT_LEAD_CHARGE = 10;
 export class VendorService {
   constructor(@inject("PrismaClient") private readonly prisma: PrismaClient, @inject(VendorRepository) private readonly vendorRepo: VendorRepository) { }
 
+  private maskPhone(phone?: string | null) {
+    if (!phone) return null;
+
+    if (phone.length <= 4) {
+      return "*".repeat(phone.length);
+    }
+
+    return `${"*".repeat(phone.length - 4)}${phone.slice(-4)}`;
+  }
+
+  private maskAddress(
+    address?: string | null,
+    area?: string | null,
+  ) {
+    if (!address) {
+      return area ?? null;
+    }
+
+    const parts = address
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    if (parts.length <= 2) {
+      return parts.map(() => "********").join(", ");
+    }
+
+    return parts
+      .map((part, index) => {
+        // Hide exact house/street information
+        if (index < parts.length - 3) {
+          return "********";
+        }
+
+        // Keep city/state visible
+        if (index === parts.length - 3 || index === parts.length - 2) {
+          return part;
+        }
+
+        // Mask pincode
+        return part.replace(/\d/g, "*");
+      })
+      .join(", ");
+  }
+
   private toPublicProfile(vendor: any): VendorPublicProfile {
     return {
       id: vendor.id,
@@ -254,11 +299,54 @@ export class VendorService {
     return this.prisma.vendorComplaint.create({ data: { vendorId, category: VendorComplaintCategory.WALLET, subject, description } });
   }
 
-  async listLeads(vendorId: string, page: number, limit: number) {
+  async listLeads(
+    vendorId: string,
+    page: number,
+    limit: number,
+  ) {
     const skip = (page - 1) * limit;
-    const [items, total] = await Promise.all([this.vendorRepo.technicianLeads(vendorId, skip, limit), this.vendorRepo.technicianLeadCount(vendorId)]);
-    const masked = items.map((lead) => lead.status === LeadStatus.NEW ? { ...lead, phone: "**********", email: null, address: null, latitude: null, longitude: null } : lead);
-    return { items: masked, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+
+    const [items, total] = await Promise.all([
+      this.vendorRepo.technicianLeads(
+        vendorId,
+        skip,
+        limit,
+      ),
+      this.vendorRepo.technicianLeadCount(vendorId),
+    ]);
+
+    const masked = items.map((lead) => {
+      if (lead.status !== LeadStatus.NEW) {
+        return lead;
+      }
+
+      return {
+        ...lead,
+
+        phone: this.maskPhone(lead.phone),
+
+        email: null,
+
+        address: this.maskAddress(
+          lead.address,
+          lead.area,
+        ),
+
+        latitude: null,
+        longitude: null,
+      };
+    });
+
+    return {
+      items: masked,
+
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async leadDetail(vendorId: string, leadId: string) {
