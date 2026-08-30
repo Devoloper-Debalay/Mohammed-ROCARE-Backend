@@ -428,19 +428,23 @@ export class AdminRepository {
 
   async dashboard(branchId?: string) {
     const vendorWhere: Prisma.VendorWhereInput = branchId ? { branchId } : {};
+    const technicianWhere: Prisma.VendorWhereInput = { ...vendorWhere, role: VendorRole.TECHNICIAN, deletedAt: null };
+    const activeTechnicianWhere: Prisma.VendorWhereInput = { ...technicianWhere, profileStatus: VendorProfileStatus.PUBLISHED };
     const leadWhere: Prisma.LeadWhereInput = branchId ? { branchId } : {};
     const orderWhere: Prisma.OrderWhereInput = branchId ? { branchId } : {};
     const productWhere: Prisma.ProductWhereInput = branchId ? { branchId } : {};
     const serviceWhere: Prisma.ServiceWhereInput = branchId ? { branchId } : {};
     const complaintWhere: Prisma.VendorComplaintWhereInput = branchId ? { vendor: { branchId } } : {};
-    const [vendors, leads, orders, products, services, complaints] = await Promise.all([
+    const [vendors, technicians, activeTechnicians, leads, orders, products, services, complaints] = await Promise.all([
       this.prisma.vendor.count({ where: vendorWhere }),
+      this.prisma.vendor.count({ where: technicianWhere }),
+      this.prisma.vendor.count({ where: activeTechnicianWhere }),
       this.prisma.lead.count({ where: leadWhere }),
       this.prisma.order.count({ where: orderWhere }),
       this.prisma.product.count({ where: productWhere }),
       this.prisma.service.count({ where: serviceWhere }),
       this.prisma.vendorComplaint.count({ where: complaintWhere }),
     ]);
-    return { vendors, leads, orders, products, services, complaints };
+    return { vendors, technicians, activeTechnicians, activeVendors: technicians, leads, orders, products, services, complaints };
   }
 }

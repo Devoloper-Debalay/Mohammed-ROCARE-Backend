@@ -354,7 +354,7 @@ export class VendorService {
     if (!lead) throw createHttpError(404, "Lead not found.");
     const isOpenForVendor = lead.status === LeadStatus.NEW && !lead.assignedVendorId && !!vendor?.branchId && lead.branchId === vendor.branchId;
     if (lead.assignedVendorId !== vendorId && !isOpenForVendor) throw createHttpError(404, "Lead not found.");
-    if (isOpenForVendor) return { ...lead, phone: "**********", email: null, address: null, latitude: null, longitude: null };
+    if (isOpenForVendor) return { ...lead, phone: this.maskPhone(lead.phone), email: null, address: this.maskAddress(lead.address, lead.area), latitude: null, longitude: null };
     return lead;
   }
 

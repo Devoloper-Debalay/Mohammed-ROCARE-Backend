@@ -9,6 +9,7 @@ import { requireAdminAuth } from "../../../middlewares/admin-auth.middleware";
 const router = Router();
 const controller = container.resolve(AdminAuthController);
 
+router.get("/branches", controller.branches);
 router.post("/login", dtoValidation(AdminLoginDto), controller.login);
 router.get("/me", requireAdminAuth, controller.me);
 

@@ -15,6 +15,14 @@ export class AdminAuthController {
     }
   };
 
+  branches = async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.listBranches(), "Branches fetched.");
+    } catch (error) {
+      next(error);
+    }
+  };
+
   me = async (_req: Request, res: Response, next: NextFunction) => {
     try {
       sendSuccess(res, await this.service.me(res.locals.adminId as string), "Admin context fetched.");

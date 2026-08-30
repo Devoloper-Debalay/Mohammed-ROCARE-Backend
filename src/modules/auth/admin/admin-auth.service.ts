@@ -35,6 +35,10 @@ export class AdminAuthService {
     };
   }
 
+  async listBranches() {
+    return this.repo.listActiveBranches();
+  }
+
   async me(userId: string) {
     const user = await this.repo.findAdminById(userId);
     if (!user || !this.repo.isAdminRole(user.role) || !user.isActive || user.deletedAt) {

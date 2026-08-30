@@ -24,6 +24,20 @@ export class AdminAuthRepository {
     return this.prisma.auditLog.create({ data: { ...data, metadata: data.metadata as any } });
   }
 
+  listActiveBranches() {
+    return this.prisma.branch.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        city: true,
+        state: true,
+      },
+    });
+  }
+
   isAdminRole(role: Role): role is Extract<Role, "ADMIN" | "SADMIN"> {
     return role === Role.ADMIN || role === Role.SADMIN;
   }
