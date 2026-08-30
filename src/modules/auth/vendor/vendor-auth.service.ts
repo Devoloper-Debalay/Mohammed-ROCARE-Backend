@@ -323,7 +323,7 @@ export class VendorAuthService {
         vendor.fullName,
         isEmail(identifier) ? "PASSWORD" : "PHONE_OTP"
       );
-      await sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
+      sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
     }
 
     return {
