@@ -10,7 +10,7 @@ const PROFILE_INCLUDE = {
 
 @injectable()
 export class VendorRepository {
-  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) { }
+  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient) {}
 
   findById(id: string) {
     return this.prisma.vendor.findUnique({ where: { id }, include: PROFILE_INCLUDE });
@@ -45,13 +45,15 @@ export class VendorRepository {
     phone: string;
     email?: string;
     password: string;
+    specialization?: string;
+    district?: string;
+    pincode?: string;
     referralCode?: string;
     referredByVendorId?: string;
   }) {
     return this.prisma.vendor.create({
       data: {
         ...data,
-        // wallet is created alongside the vendor so every vendor always has one
         wallet: { create: {} },
       },
     });
@@ -121,8 +123,6 @@ export class VendorRepository {
       data: {
         verificationStatus,
         rejectionReason: rejectionReason ?? null,
-        // Approving verification doesn't auto-publish — that's a distinct
-        // admin action per the signup flow (Verified -> Published).
       },
     });
   }
@@ -150,159 +150,179 @@ export class VendorRepository {
     });
   }
 
-  wallet(vendorId: string) { return this.prisma.wallet.findUnique({ where: { vendorId } }); }
-  walletHistory(vendorId: string, skip: number, take: number) {
-    return this.prisma.walletTransaction.findMany({ where: { wallet: { vendorId } }, orderBy: { createdAt: "desc" }, skip, take });
+  wallet(vendorId: string) {
+    return this.prisma.wallet.findUnique({ where: { vendorId } });
   }
-  walletHistoryCount(vendorId: string) { return this.prisma.walletTransaction.count({ where: { wallet: { vendorId } } }); }
 
-  async technicianLeads(
-    vendorId: string,
-    skip: number,
-    take: number,
-  ) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: {
-        id: vendorId,
-      },
-      select: {
-        id: true,
-        branchId: true,
-        deletedAt: true,
-      },
-    });
-
-    if (!vendor) {
-      throw createHttpError(404, "Vendor not found.");
-    }
-
-    if (vendor.deletedAt) {
-      throw createHttpError(
-        403,
-        "Vendor account is deleted.",
-      );
-    }
-
-    console.log("[LEAD DEBUG]", {
-      vendorId,
-      vendorBranchId: vendor.branchId,
-    });
-
-    const allNewLeads =
-      await this.prisma.lead.findMany({
-        where: {
-          status: LeadStatus.NEW,
-          assignedVendorId: null,
-        },
-
-        select: {
-          id: true,
-          branchId: true,
-          status: true,
-          assignedVendorId: true,
-          serviceRequestId: true,
-          createdAt: true,
-        },
-      });
-
-    console.log(
-      "[LEAD DEBUG] ALL NEW LEADS",
-      allNewLeads,
-    );
-
-    const where =
-      vendor.branchId
-        ? {
-          OR: [
-            {
-              assignedVendorId: vendorId,
-            },
-            {
-              status: LeadStatus.NEW,
-              assignedVendorId: null,
-              branchId: vendor.branchId,
-            },
-          ],
-        }
-        : {
-          assignedVendorId: vendorId,
-        };
-
-    return this.prisma.lead.findMany({
-      where,
-
-      include: {
-        serviceRequest: {
-          include: {
-            service: true,
-          },
-        },
-
-        assignmentHistory: true,
-
-        branch: true,
-      },
-
-      orderBy: {
-        createdAt: "desc",
-      },
-
+  walletHistory(vendorId: string, skip: number, take: number) {
+    return this.prisma.walletTransaction.findMany({
+      where: { wallet: { vendorId } },
+      orderBy: { createdAt: "desc" },
       skip,
       take,
     });
   }
 
-  async technicianLeadCount(
-    vendorId: string,
-  ) {
-    const vendor = await this.prisma.vendor.findUnique({
-      where: {
-        id: vendorId,
-      },
+  walletHistoryCount(vendorId: string) {
+    return this.prisma.walletTransaction.count({ where: { wallet: { vendorId } } });
+  }
 
+  private buildTechnicianLeadsWhere(vendor: {
+    id: string;
+    branchId: string | null;
+    district: string | null;
+    city: string | null;
+    pincode: string | null;
+    specialization: string | null;
+  }): Prisma.LeadWhereInput {
+    const openLeadConditions: Prisma.LeadWhereInput[] = [
+      { status: LeadStatus.NEW },
+      { assignedVendorId: null },
+      { isReleased: true },
+    ];
+
+    // Single specialization match
+    if (vendor.specialization) {
+      openLeadConditions.push({
+        OR: [
+          { specialization: vendor.specialization },
+          { specialization: null },
+        ],
+      });
+    }
+
+    // Local area match (district / pincode / city / branch)
+    const locationOrs: Prisma.LeadWhereInput[] = [];
+    if (vendor.district) {
+      locationOrs.push({ district: { equals: vendor.district, mode: "insensitive" } });
+    }
+    if (vendor.city) {
+      locationOrs.push({ district: { equals: vendor.city, mode: "insensitive" } });
+    }
+    if (vendor.pincode) {
+      locationOrs.push({ pincode: vendor.pincode });
+    }
+    if (vendor.branchId) {
+      locationOrs.push({ branchId: vendor.branchId });
+    }
+
+    if (locationOrs.length > 0) {
+      openLeadConditions.push({ OR: locationOrs });
+    }
+
+    return {
+      OR: [
+        { assignedVendorId: vendor.id },
+        { AND: openLeadConditions },
+      ],
+    };
+  }
+
+  async technicianLeads(vendorId: string, skip: number, take: number) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id: vendorId },
       select: {
         id: true,
         branchId: true,
+        district: true,
+        city: true,
+        pincode: true,
+        specialization: true,
         deletedAt: true,
       },
     });
 
-    if (!vendor || vendor.deletedAt) {
-      return 0;
-    }
+    if (!vendor) throw createHttpError(404, "Vendor not found.");
+    if (vendor.deletedAt) throw createHttpError(403, "Vendor account is deleted.");
 
-    const where =
-      vendor.branchId
-        ? {
-          OR: [
-            {
-              assignedVendorId: vendorId,
-            },
+    const where = this.buildTechnicianLeadsWhere(vendor);
 
-            {
-              status: LeadStatus.NEW,
-              assignedVendorId: null,
-              branchId: vendor.branchId,
-            },
-          ],
-        }
-        : {
-          assignedVendorId: vendorId,
-        };
-
-    return this.prisma.lead.count({
+    return this.prisma.lead.findMany({
       where,
+      include: {
+        serviceRequest: { include: { service: true } },
+        assignmentHistory: true,
+        branch: true,
+        product: true,
+        service: true,
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
     });
   }
 
-  lead(id: string) { return this.prisma.lead.findUnique({ where: { id }, include: { visitProofs: true, denialProofs: true, progressLogs: true, payments: true, review: true, serviceRequest: true } }); }
+  async technicianLeadCount(vendorId: string) {
+    const vendor = await this.prisma.vendor.findUnique({
+      where: { id: vendorId },
+      select: {
+        id: true,
+        branchId: true,
+        district: true,
+        city: true,
+        pincode: true,
+        specialization: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!vendor || vendor.deletedAt) return 0;
+    const where = this.buildTechnicianLeadsWhere(vendor);
+    return this.prisma.lead.count({ where });
+  }
+
+  lead(id: string) {
+    return this.prisma.lead.findUnique({
+      where: { id },
+      include: {
+        visitProofs: true,
+        denialProofs: true,
+        progressLogs: true,
+        payments: true,
+        review: true,
+        serviceRequest: true,
+        branch: true,
+      },
+    });
+  }
+
+  createLead(data: Prisma.LeadUncheckedCreateInput) {
+    return this.prisma.lead.create({ data });
+  }
 
   notifications(vendorId: string, skip: number, take: number) {
-    return this.prisma.notification.findMany({ where: { vendorId }, orderBy: { createdAt: "desc" }, skip, take });
+    return this.prisma.notification.findMany({
+      where: { vendorId },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+    });
   }
-  notificationCount(vendorId: string) { return this.prisma.notification.count({ where: { vendorId } }); }
-  offers(vendorId: string) { return this.prisma.offerReward.findMany({ where: { vendorId }, include: { offer: true }, orderBy: { grantedAt: "desc" } }); }
-  complaints(vendorId: string) { return this.prisma.vendorComplaint.findMany({ where: { vendorId }, orderBy: { createdAt: "desc" } }); }
-  products() { return this.prisma.product.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } }); }
-  parts() { return this.prisma.part.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } }); }
+
+  notificationCount(vendorId: string) {
+    return this.prisma.notification.count({ where: { vendorId } });
+  }
+
+  offers(vendorId: string) {
+    return this.prisma.offerReward.findMany({
+      where: { vendorId },
+      include: { offer: true },
+      orderBy: { grantedAt: "desc" },
+    });
+  }
+
+  complaints(vendorId: string) {
+    return this.prisma.vendorComplaint.findMany({
+      where: { vendorId },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  products() {
+    return this.prisma.product.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
+  }
+
+  parts() {
+    return this.prisma.part.findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
+  }
 }

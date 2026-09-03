@@ -6,12 +6,82 @@ import { sendSuccess } from "../../shared/response";
 @injectable()
 export class CustomerController {
   constructor(@inject(CustomerService) private readonly service: CustomerService) {}
-  signup = async (req: Request,res:Response,next:NextFunction)=>{ try { sendSuccess(res, await this.service.signup(req.body), "Customer signup successful.", 201); } catch(e){next(e);} };
-  sendOtp = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.sendOtp(req.body.identifier,req.body.purpose),"OTP sent.");}catch(e){next(e);}};
-  verifyOtp = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.verifyOtp(req.body.identifier,req.body.code,req.body.purpose),"OTP verified.");}catch(e){next(e);}};
-  profile = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.profile(res.locals.customerUserId),"Customer profile.");}catch(e){next(e);}};
-  addresses = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.addresses(res.locals.customerUserId),"Addresses.");}catch(e){next(e);}};
-  addAddress = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.addAddress(res.locals.customerUserId,req.body),"Address added.",201);}catch(e){next(e);}};
-  updateAddress = async (req:Request,res:Response,next:NextFunction)=>{try{sendSuccess(res,await this.service.updateAddress(res.locals.customerUserId,req.params.id as string,req.body),"Address updated.");}catch(e){next(e);}};
-  deleteAddress = async (req:Request,res:Response,next:Function)=>{try{await this.service.deleteAddress(res.locals.customerUserId,req.params.id as string);sendSuccess(res,undefined,"Address deleted.");}catch(e){next(e);}};
+
+  signup = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.signup(req.body), "Customer signup successful.", 201);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  sendOtp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.sendOtp(req.body.identifier, req.body.purpose), "OTP sent.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  verifyOtp = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.verifyOtp(req.body.identifier, req.body.code, req.body.purpose), "OTP verified.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  profile = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.profile(res.locals.customerUserId), "Customer profile.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  addresses = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.addresses(res.locals.customerUserId), "Addresses.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  addAddress = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.addAddress(res.locals.customerUserId, req.body), "Address added.", 201);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  updateAddress = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.updateAddress(res.locals.customerUserId, req.params.id as string, req.body), "Address updated.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  deleteAddress = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await this.service.deleteAddress(res.locals.customerUserId, req.params.id as string);
+      sendSuccess(res, undefined, "Address deleted.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  createLead = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.service.createLead(res.locals.customerUserId, req.body),
+        "Lead submitted successfully.",
+        201
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
 }

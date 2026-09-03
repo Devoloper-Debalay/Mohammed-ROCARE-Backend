@@ -1,5 +1,6 @@
 import { Type } from "class-transformer";
 import {
+  IsArray,
   IsBoolean,
   IsEmail,
   IsEnum,
@@ -15,7 +16,18 @@ import {
   MinLength,
   IsDateString,
 } from "class-validator";
-import { OrderStatus, PaymentStatus, ProductCategory, Role, ServiceCategory } from "../../generated/prisma/enums";
+import {
+  OrderStatus,
+  PaymentStatus,
+  ProductCategory,
+  Role,
+  ServiceCategory,
+  CategoryType,
+  VendorProfileStatus,
+  VendorRole,
+  VendorVerificationStatus,
+  LeadStatus,
+} from "../../generated/prisma/enums";
 
 export class PaginationDto {
   @IsOptional()
@@ -39,6 +51,35 @@ export class VendorDecisionDto {
   @IsOptional()
   @IsString()
   reason?: string;
+}
+
+export class DenialProofReviewDto {
+  @IsBoolean()
+  approved!: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  refundAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  reason?: string;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
+}
+
+export class LeadRefundDto {
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  amount?: number;
+
+  @IsOptional()
+  @IsString()
+  note?: string;
 }
 
 export class AssignBranchDto {
@@ -65,12 +106,26 @@ export class ProductDto {
   @IsNotEmpty()
   name!: string;
 
+  @IsOptional()
   @IsEnum(ProductCategory)
-  category!: ProductCategory;
+  category?: ProductCategory;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
+
+  @IsOptional()
+  @IsString()
+  brand?: string;
 
   @IsOptional()
   @IsString()
   description?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  mrp?: number;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
@@ -83,9 +138,58 @@ export class ProductDto {
   discountPercent?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  vendorWholesalePrice?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  bulkMinQty?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  bulkDiscountPercent?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  referralDiscountPercent?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isPartOnlyForVendor?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  pv?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  bv?: number;
+
+  @IsOptional()
   @IsInt()
   @Min(0)
   stock?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @IsOptional()
+  specifications?: Record<string, any>;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  features?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -101,8 +205,13 @@ export class ServiceDto {
   @IsNotEmpty()
   name!: string;
 
+  @IsOptional()
   @IsEnum(ServiceCategory)
-  category!: ServiceCategory;
+  category?: ServiceCategory;
+
+  @IsOptional()
+  @IsUUID()
+  categoryId?: string;
 
   @IsOptional()
   @IsString()
@@ -190,6 +299,273 @@ export class CreateAdminDto {
   jobTitle?: string;
 }
 
+export class CreateVendorDto {
+  @IsEnum(VendorRole)
+  role!: VendorRole;
+
+  @IsString()
+  @IsNotEmpty()
+  fullName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  state?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  experienceYears?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  skills?: string[];
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @IsEnum(VendorVerificationStatus)
+  verificationStatus?: VendorVerificationStatus;
+
+  @IsOptional()
+  @IsEnum(VendorProfileStatus)
+  profileStatus?: VendorProfileStatus;
+}
+
+export class AdminCreateLeadDto {
+  @IsString()
+  @IsNotEmpty()
+  customerName!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceType?: string;
+
+  @IsOptional()
+  @IsString()
+  issue?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  estimatedAmount?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadPrice?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadAcceptPrice?: number;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isReleased?: boolean;
+}
+
+export class PriceAndReleaseLeadDto {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadPrice!: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadAcceptPrice!: number;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+export class AdminUpdateLeadDto {
+  @IsOptional()
+  @IsString()
+  customerName?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceType?: string;
+
+  @IsOptional()
+  @IsString()
+  issue?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  estimatedAmount?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadPrice?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadAcceptPrice?: number;
+
+  @IsOptional()
+  @IsEnum(LeadStatus)
+  status?: LeadStatus;
+
+  @IsOptional()
+  @IsUUID()
+  assignedVendorId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  serviceId?: string | null;
+
+  @IsOptional()
+  @IsUUID()
+  productId?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isReleased?: boolean;
+}
+
+export class LeadQueryDto extends PaginationDto {
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isReleased?: boolean;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
 export class BranchDto {
   @IsString()
   @IsNotEmpty()
@@ -230,7 +606,6 @@ export class SettingDto {
   description?: string;
 }
 
-
 export class WalletAdjustmentDto {
   @IsUUID()
   vendorId!: string;
@@ -252,4 +627,81 @@ export class ComplaintReplyDto {
   @IsOptional()
   @IsString()
   status?: string;
+}
+
+export class AdminNotificationQueryDto extends PaginationDto {
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isRead?: boolean;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
+}
+
+export class AdminBroadcastNotificationDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  message!: string;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  target!: "ALL_TECHNICIANS" | "ALL_CUSTOMERS" | "BRANCH_TECHNICIANS" | "ALL_ADMINS";
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+export class AdminCategoryDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  slug?: string;
+
+  @IsEnum(CategoryType)
+  type!: CategoryType; // "PRODUCT" | "SERVICE"
+
+  @IsOptional()
+  @IsString()
+  icon?: string;
+
+  @IsOptional()
+  @IsString()
+  image?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class AdminCategoryQueryDto extends PaginationDto {
+  @IsOptional()
+  @IsEnum(CategoryType)
+  type?: CategoryType;
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  @Type(() => Boolean)
+  isActive?: boolean;
 }

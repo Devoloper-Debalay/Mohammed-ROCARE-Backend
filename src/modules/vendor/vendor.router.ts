@@ -16,8 +16,8 @@ import {
   PurchasePartDto,
   PurchaseProductDto,
   RechargeWalletDto,
-  ReviewDto,
   ComplaintDto,
+  VendorCreateLeadDto,
 } from "./vendor.dto";
 import { VendorRole } from "../../generated/prisma/enums";
 
@@ -31,10 +31,6 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB per file
 });
-
-// Every route below requires a valid vendor access token and a
-// non-blocked/non-deleted account. No specific role restriction here —
-// both AGENT and TECHNICIAN manage their own profile the same way.
 
 vendorRouter.get("/profile", controller.getProfile);
 vendorRouter.patch("/profile", dtoValidation(UpdateVendorProfileDto), controller.updateProfile);
@@ -58,7 +54,6 @@ vendorRouter.put(
 );
 
 vendorRouter.post("/submit-for-verification", controller.submitForVerification);
-
 vendorRouter.post("/change-password", dtoValidation(ChangeVendorPasswordDto), controller.changePassword);
 
 vendorRouter.post(
@@ -74,14 +69,14 @@ vendorRouter.get("/wallet/history", controller.walletHistory);
 vendorRouter.post("/wallet/recharge", dtoValidation(RechargeWalletDto), controller.recharge);
 vendorRouter.post("/wallet/raise-issue", dtoValidation(ComplaintDto), controller.walletIssue);
 
+// Vendor Leads (Technicians)
+vendorRouter.post("/leads", dtoValidation(VendorCreateLeadDto), controller.createLead);
 vendorRouter.get("/leads", enforceVendor(VendorRole.TECHNICIAN), controller.leads);
 vendorRouter.get("/leads/:leadId", enforceVendor(VendorRole.TECHNICIAN), controller.lead);
 vendorRouter.post("/leads/:leadId/accept", enforceVendor(VendorRole.TECHNICIAN), controller.accept);
 vendorRouter.post("/leads/:leadId/start", enforceVendor(VendorRole.TECHNICIAN), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.start);
 vendorRouter.post("/leads/:leadId/deny", enforceVendor(VendorRole.TECHNICIAN), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.deny);
 vendorRouter.post("/leads/:leadId/complete", enforceVendor(VendorRole.TECHNICIAN), controller.complete);
-// NOTE: lead review moved to a public router (lead-review.public.router.ts) —
-// it must NOT require vendor auth, since the client (not the vendor) submits it.
 
 vendorRouter.get("/notifications", controller.notifications);
 vendorRouter.patch("/notifications/:id/read", controller.read);

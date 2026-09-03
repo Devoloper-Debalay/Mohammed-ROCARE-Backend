@@ -2,12 +2,14 @@ import { Expose, Type } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -15,17 +17,31 @@ import {
 import { VendorComplaintCategory } from "../../generated/prisma/enums";
 
 export class UpdateVendorProfileDto {
-
   @Expose()
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: "vendorCode is required." })
-  vendorCode!: string;
+  vendorCode?: string;
 
   @Expose()
   @IsOptional()
   @IsString()
   @MaxLength(120)
   fullName?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  profilePhoto?: string;
 
   @Expose()
   @IsOptional()
@@ -36,6 +52,11 @@ export class UpdateVendorProfileDto {
   @IsOptional()
   @IsString()
   city?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  district?: string;
 
   @Expose()
   @IsOptional()
@@ -71,11 +92,10 @@ export class UpdateVendorProfileDto {
   @Expose()
   @IsOptional()
   @IsString()
-  specialization?: string;
+  specialization?: string; // Single specialization
 }
 
 export class UpdateVendorBankDto {
-
   @Expose()
   @IsString()
   @IsNotEmpty({ message: "vendorCode is required." })
@@ -98,7 +118,6 @@ export class UpdateVendorBankDto {
 }
 
 export class UpdateVendorKycDto {
-
   @Expose()
   @IsString()
   @IsNotEmpty({ message: "vendorCode is required." })
@@ -113,9 +132,6 @@ export class UpdateVendorKycDto {
   @IsOptional()
   @IsString()
   panNumber?: string;
-
-  // aadhaarFrontImage / aadhaarBackImage / panImage come from multer file
-  // uploads in the router, not the JSON body — see vendor.router.ts.
 }
 
 export class RequestAccountDeletionDto {
@@ -135,22 +151,25 @@ export class ChangeVendorPasswordDto {
   @Expose()
   @IsString()
   @IsNotEmpty({ message: "newPassword is required." })
-  @MaxLength(72) // bcrypt's effective input limit
+  @MaxLength(72)
   newPassword!: string;
 }
 
 export class RechargeWalletDto {
   @Expose() @IsNumber() @Min(1) amount!: number;
 }
+
 export class WalletIssueDto {
   @Expose() @IsString() @IsNotEmpty() subject!: string;
   @Expose() @IsString() @IsNotEmpty() description!: string;
 }
+
 export class AdminWalletAdjustmentDto {
   @Expose() @IsString() @IsNotEmpty() vendorId!: string;
   @Expose() @IsNumber() @Min(0.01) amount!: number;
   @Expose() @IsOptional() @IsString() note?: string;
 }
+
 export class LeadActionDto {
   @Expose()
   @IsOptional()
@@ -189,11 +208,13 @@ export class LeadActionDto {
   @IsString()
   reason?: string;
 }
+
 export class ReviewDto {
   @Expose() @IsString() @IsNotEmpty() reviewToken!: string;
   @Expose() @IsInt() @Min(1) @Max(5) rating!: number;
   @Expose() @IsOptional() @IsString() comment?: string;
 }
+
 export class ComplaintDto {
   @Expose() @IsEnum(VendorComplaintCategory) category!: VendorComplaintCategory;
   @Expose() @IsString() @IsNotEmpty() subject!: string;
@@ -203,10 +224,65 @@ export class ComplaintDto {
 export class CommissionConfigDto {
   @Expose() @IsNumber() @Min(0) @Max(100) percentage!: number;
 }
+
+export class VendorCreateLeadDto {
+  @Expose()
+  @IsString()
+  @IsNotEmpty()
+  customerName!: string;
+
+  @Expose()
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @Expose()
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  pincode?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  specialization?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  serviceType?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsString()
+  issue?: string;
+
+  @Expose()
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  estimatedAmount?: number;
+}
+
 export class ProductPurchaseDto {
   @Expose() @IsString() @IsNotEmpty() productId!: string;
   @Expose() @IsInt() @Min(1) quantity!: number;
 }
+
 export class PartPurchaseDto {
   @Expose() @IsString() @IsNotEmpty() partId!: string;
   @Expose() @IsInt() @Min(1) quantity!: number;
@@ -216,6 +292,7 @@ export class PurchaseProductDto {
   @Expose() @IsString() @IsNotEmpty() productId!: string;
   @Expose() @IsInt() @Min(1) quantity!: number;
 }
+
 export class PurchasePartDto {
   @Expose() @IsString() @IsNotEmpty() partId!: string;
   @Expose() @IsInt() @Min(1) quantity!: number;

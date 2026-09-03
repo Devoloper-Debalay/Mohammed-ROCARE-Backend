@@ -15,13 +15,19 @@ import {
   accountRestrictedEmail,
 } from "../../utils/vendorMailTemplates";
 
+import { MlmService } from "../mlm/mlm.service";
+
 const SALT_ROUNDS = 10;
 export const DEFAULT_COMMISSION_PERCENT = 10;
 export const DEFAULT_LEAD_CHARGE = 10;
 
 @injectable()
 export class VendorService {
-  constructor(@inject("PrismaClient") private readonly prisma: PrismaClient, @inject(VendorRepository) private readonly vendorRepo: VendorRepository) { }
+  constructor(
+    @inject("PrismaClient") private readonly prisma: PrismaClient,
+    @inject(VendorRepository) private readonly vendorRepo: VendorRepository,
+    @inject(MlmService) private readonly mlmService: MlmService
+  ) { }
 
   private maskPhone(phone?: string | null) {
     if (!phone) return null;
@@ -90,6 +96,13 @@ export class VendorService {
       profileStatus: vendor.profileStatus,
       rejectionReason: vendor.rejectionReason ?? null,
       referralCode: vendor.referralCode ?? null,
+      rank: vendor.rank ?? "BRONZE",
+      rankProgress: this.mlmService.getRankProgress(
+        vendor.bv ? Number(vendor.bv) : 0
+      ),
+      pv: vendor.pv ? Number(vendor.pv) : 0,
+      bv: vendor.bv ? Number(vendor.bv) : 0,
+      totalEarnings: vendor.totalEarnings ? Number(vendor.totalEarnings) : 0,
       createdAt: vendor.createdAt,
       updatedAt: vendor.updatedAt,
       kyc: vendor.kyc
@@ -172,7 +185,34 @@ export class VendorService {
 
   async updateProfile(vendorCode: string, data: Record<string, unknown>): Promise<VendorPublicProfile> {
     const vendor = await this.getVendorOrThrowByCode(vendorCode);
-    const updated = await this.vendorRepo.updateProfile(vendor.id, data);
+
+    // Whitelist only safe editable profile fields
+    const safeUpdateData: Record<string, unknown> = {};
+
+    if (data.fullName !== undefined) safeUpdateData.fullName = data.fullName;
+    if (data.email !== undefined) safeUpdateData.email = data.email;
+    if (data.phone !== undefined) safeUpdateData.phone = data.phone;
+    if (data.profilePhoto !== undefined) safeUpdateData.profilePhoto = data.profilePhoto;
+    if (data.address !== undefined) safeUpdateData.address = data.address;
+    if (data.city !== undefined) safeUpdateData.city = data.city;
+    if (data.district !== undefined) safeUpdateData.district = data.district;
+    if (data.state !== undefined) safeUpdateData.state = data.state;
+    if (data.pincode !== undefined) safeUpdateData.pincode = data.pincode;
+    if (data.latitude !== undefined) safeUpdateData.latitude = data.latitude;
+    if (data.longitude !== undefined) safeUpdateData.longitude = data.longitude;
+    if (data.experienceYears !== undefined) safeUpdateData.experienceYears = data.experienceYears;
+    if (data.skills !== undefined) safeUpdateData.skills = data.skills;
+    if (data.specialization !== undefined) safeUpdateData.specialization = data.specialization;
+
+    // Explicitly guarantee verificationStatus and profileStatus are NEVER overwritten or downgraded by profile updates
+    delete (safeUpdateData as any).verificationStatus;
+    delete (safeUpdateData as any).profileStatus;
+    delete (safeUpdateData as any).role;
+    delete (safeUpdateData as any).password;
+    delete (safeUpdateData as any).vendorCode;
+    delete (safeUpdateData as any).id;
+
+    const updated = await this.vendorRepo.updateProfile(vendor.id, safeUpdateData);
     return this.getProfile(updated.id);
   }
 
@@ -252,6 +292,31 @@ export class VendorService {
       await sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
     }
 
+    // Alert Admins of new KYC submission
+    await this.prisma.user
+      .findMany({
+        where: {
+          role: { in: ["ADMIN", "SADMIN"] as any },
+          isActive: true,
+          deletedAt: null,
+          ...(vendor.branchId ? { adminProfile: { branchId: vendor.branchId } } : {}),
+        },
+        select: { id: true },
+      })
+      .then(async (admins) => {
+        if (admins.length > 0) {
+          await this.prisma.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Vendor KYC Submitted 📄",
+              message: `Technician ${vendor.fullName} (${vendor.vendorCode}) submitted documents for verification.`,
+              type: "VENDOR_KYC_SUBMITTED",
+            })),
+          });
+        }
+      })
+      .catch((err) => console.error("[Notify Admins KYC Error]", err));
+
     return this.getProfile(vendor.id);
   }
 
@@ -263,6 +328,26 @@ export class VendorService {
       const { subject, html } = deletionRequestedEmail(vendor.fullName);
       await sendMail({ to: vendor.email, subject, html }).catch(() => undefined);
     }
+
+    // Alert Super Admins
+    await this.prisma.user
+      .findMany({
+        where: { role: "SADMIN" as any, isActive: true, deletedAt: null },
+        select: { id: true },
+      })
+      .then(async (admins) => {
+        if (admins.length > 0) {
+          await this.prisma.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Account Deletion Requested ⚠️",
+              message: `Technician ${vendor.fullName} requested account deletion. Reason: ${reason}`,
+              type: "VENDOR_DELETION_REQUESTED",
+            })),
+          });
+        }
+      })
+      .catch((err) => console.error("[Notify Admins Deletion Error]", err));
   }
 
   private async notify(vendorId: string, title: string, message: string, type: string): Promise<void> {
@@ -365,29 +450,98 @@ export class VendorService {
     if (vendor.profileStatus === VendorProfileStatus.BLOCKED) throw createHttpError(403, "Your technician account is blocked.");
   }
 
+  async createLead(vendorId: string, data: any) {
+    const vendor = await this.prisma.vendor.findUnique({ where: { id: vendorId } });
+    if (!vendor) throw createHttpError(404, "Vendor not found.");
+
+    const lead = await this.prisma.lead.create({
+      data: {
+        customerName: data.customerName,
+        phone: data.phone,
+        email: data.email,
+        address: data.address,
+        district: data.district || vendor.district,
+        pincode: data.pincode || vendor.pincode,
+        specialization: data.specialization || vendor.specialization,
+        serviceType: data.serviceType,
+        issue: data.issue,
+        estimatedAmount: data.estimatedAmount,
+        isReleased: false,
+        leadCreatedByType: "VENDOR",
+        branchId: vendor.branchId,
+        source: "ALL",
+        status: LeadStatus.NEW,
+      },
+    });
+
+    await this.notify(
+      vendorId,
+      "Lead Submitted",
+      "Your lead has been submitted to admin for pricing and release.",
+      "LEAD_SUBMITTED"
+    );
+    return lead;
+  }
+
   async acceptLead(vendorId: string, leadId: string) {
     await this.assertTechnician(vendorId);
     return this.prisma.$transaction(async (tx) => {
       const [lead, vendor] = await Promise.all([
         tx.lead.findUnique({ where: { id: leadId } }),
-        tx.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true } }),
+        tx.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true, specialization: true } }),
       ]);
       if (!lead) throw createHttpError(404, "Lead not found.");
-      if (lead.status !== LeadStatus.NEW || lead.assignedVendorId) throw createHttpError(409, "This lead is no longer available.");
-      if (!vendor?.branchId || lead.branchId !== vendor.branchId) throw createHttpError(403, "Lead is outside your branch.");
-      const charge = lead.leadAcceptanceCharge?.toNumber() ?? DEFAULT_LEAD_CHARGE;
+      if (lead.status !== LeadStatus.NEW || lead.assignedVendorId) {
+        throw createHttpError(409, "This lead is no longer available.");
+      }
+      if (!lead.isReleased) {
+        throw createHttpError(409, "This lead has not been released by the admin yet.");
+      }
+      if (vendor?.specialization && lead.specialization && vendor.specialization !== lead.specialization) {
+        throw createHttpError(403, `This lead requires ${lead.specialization} specialization.`);
+      }
+
+      const charge = lead.leadAcceptPrice?.toNumber() ?? lead.leadAcceptanceCharge?.toNumber() ?? DEFAULT_LEAD_CHARGE;
       const wallet = await tx.wallet.findUnique({ where: { vendorId } });
       if (!wallet || wallet.balance.lt(charge)) throw createHttpError(402, "INSUFFICIENT_WALLET_BALANCE");
-      const claimed = await tx.lead.updateMany({ where: { id: leadId, status: LeadStatus.NEW, assignedVendorId: null }, data: { assignedVendorId: vendorId, status: LeadStatus.ACCEPTED, acceptedAt: new Date(), leadAcceptanceCharge: charge } });
+
+      const claimed = await tx.lead.updateMany({
+        where: { id: leadId, status: LeadStatus.NEW, assignedVendorId: null },
+        data: {
+          assignedVendorId: vendorId,
+          status: LeadStatus.ACCEPTED,
+          acceptedAt: new Date(),
+          leadAcceptanceCharge: charge,
+        },
+      });
       if (claimed.count !== 1) throw createHttpError(409, "This lead was just purchased by another vendor.");
+
       const balance = wallet.balance.minus(charge);
       await tx.wallet.update({ where: { id: wallet.id }, data: { balance, totalSpent: wallet.totalSpent.plus(charge) } });
-      await tx.walletTransaction.create({ data: { walletId: wallet.id, type: WalletTxnType.LEAD_ACCEPT, status: WalletTxnStatus.SUCCESS, amount: charge, balanceAfter: balance, referenceId: leadId, note: "Lead purchase charge" } });
+      await tx.walletTransaction.create({
+        data: {
+          walletId: wallet.id,
+          type: WalletTxnType.LEAD_ACCEPT,
+          status: WalletTxnStatus.SUCCESS,
+          amount: charge,
+          balanceAfter: balance,
+          referenceId: leadId,
+          note: `Lead purchase charge for ${lead.specialization || "service"}`,
+        },
+      });
       await tx.leadAssignment.create({ data: { leadId, vendorId } });
       const updated = await tx.lead.findUniqueOrThrow({ where: { id: leadId } });
-      if (updated.serviceRequestId) await tx.serviceRequest.update({ where: { id: updated.serviceRequestId }, data: { assignedVendorId: vendorId, status: ServiceRequestStatus.ACCEPTED, acceptedAt: updated.acceptedAt } });
+      if (updated.serviceRequestId) {
+        await tx.serviceRequest.update({
+          where: { id: updated.serviceRequestId },
+          data: { assignedVendorId: vendorId, status: ServiceRequestStatus.ACCEPTED, acceptedAt: updated.acceptedAt },
+        });
+      }
       return updated;
-    }).then(async (lead) => { await this.notify(vendorId, "Lead accepted", `Lead ${lead.id} has been accepted.`, "LEAD_ACCEPTED"); return lead; });
+    }).then(async (lead) => {
+      await this.notify(vendorId, "Lead accepted", `Lead ${lead.id} has been accepted.`, "LEAD_ACCEPTED");
+      return lead;
+    });
   }
 
   async startWork(vendorId: string, leadId: string, input: ProofInput) {
@@ -406,7 +560,34 @@ export class VendorService {
       const updated = await tx.lead.update({ where: { id: leadId }, data: { status: LeadStatus.PENDING_START_VERIFICATION } });
       return { lead: updated, proof };
     });
+
     await this.notify(vendorId, "Start proof submitted", "Your start-work proof is awaiting admin verification.", "LEAD_STARTED");
+
+    // Alert Branch Admins
+    await this.prisma.user
+      .findMany({
+        where: {
+          role: { in: ["ADMIN", "SADMIN"] as any },
+          isActive: true,
+          deletedAt: null,
+          ...(result.lead.branchId ? { adminProfile: { branchId: result.lead.branchId } } : {}),
+        },
+        select: { id: true },
+      })
+      .then(async (admins) => {
+        if (admins.length > 0) {
+          await this.prisma.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Start-Work Proof Submitted 📸",
+              message: `Technician started work on lead #${result.lead.id.slice(0, 8)}. Awaiting verification.`,
+              type: "START_PROOF_SUBMITTED",
+            })),
+          });
+        }
+      })
+      .catch((err) => console.error("[Notify Admins Start Proof Error]", err));
+
     return result;
   }
 
@@ -442,7 +623,7 @@ export class VendorService {
       LeadStatus.PENDING_START_VERIFICATION,
     ];
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findUnique({
         where: {
           id: leadId,
@@ -486,6 +667,33 @@ export class VendorService {
         proof,
       };
     });
+
+    // Alert Branch Admins
+    await this.prisma.user
+      .findMany({
+        where: {
+          role: { in: ["ADMIN", "SADMIN"] as any },
+          isActive: true,
+          deletedAt: null,
+          ...(result.lead.branchId ? { adminProfile: { branchId: result.lead.branchId } } : {}),
+        },
+        select: { id: true },
+      })
+      .then(async (admins) => {
+        if (admins.length > 0) {
+          await this.prisma.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Denial Proof Submitted 🛑",
+              message: `Technician submitted denial proof on lead #${result.lead.id.slice(0, 8)}. Reason: ${input.reason}`,
+              type: "DENIAL_PROOF_SUBMITTED",
+            })),
+          });
+        }
+      })
+      .catch((err) => console.error("[Notify Admins Denial Proof Error]", err));
+
+    return result;
   }
 
   async completeLead(vendorId: string, leadId: string) {

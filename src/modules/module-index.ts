@@ -11,6 +11,7 @@ export { default as vendorAuthRouter } from "./auth/vendor/vendor-auth.router";
 export { default as vendorRouter } from "./vendor/vendor.router";
 export { default as cartRouter } from "./cart/cart.router";
 export { default as orderRouter } from "./orders/order.router";
+export { default as mlmRouter } from "./mlm/mlm.router";
 export { default as serviceRequestRouter } from "./service-request/service-request.router";
 export { default as paymentRouter } from "./payment/payment.router";
 export { default as productsRouter } from "./products/products.router";

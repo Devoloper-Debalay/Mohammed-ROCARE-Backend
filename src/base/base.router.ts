@@ -19,6 +19,9 @@ import cartRouter from "../modules/cart/cart.router";
 import orderRouter from "../modules/orders/order.router";
 import offersRouter from "../modules/offers/offers.router";
 
+// MLM Commission & Referral System
+import mlmRouter from "../modules/mlm/mlm.router";
+
 // Service Requests
 import customerServiceRequestRouter from "../modules/service-request/customer-service-request.router";
 
@@ -62,6 +65,9 @@ mainRouter.use("/catalog", productsRouter);
 /* ---------------- Cart & Orders ---------------- */
 mainRouter.use("/cart", cartRouter);
 mainRouter.use("/orders", orderRouter);
+
+/* ---------------- MLM / Commissions / Referrals ---------------- */
+mainRouter.use("/mlm", mlmRouter);
 
 /* ---------------- Offers ---------------- */
 mainRouter.use("/offers", offersRouter);

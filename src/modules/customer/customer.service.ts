@@ -12,16 +12,29 @@ import { vendorSmsService } from "../auth/vendor/vendor-sms.service";
 import { createHash, randomInt, randomBytes } from "crypto";
 import prisma from "../../config/database";
 import { logActivity, sendMailSafe, simpleEmail } from "../../utils/serviceEvents";
+import { LeadStatus } from "../../generated/prisma/enums";
+
+import { MlmService } from "../mlm/mlm.service";
 
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
 
 @injectable()
 export class CustomerService {
-  constructor(@inject(CustomerRepository) private readonly repo: CustomerRepository) { }
+  constructor(
+    @inject(CustomerRepository) private readonly repo: CustomerRepository,
+    @inject(MlmService) private readonly mlmService: MlmService
+  ) {}
 
   private async issueOtp(identifier: string, purpose: "SIGNUP" | "LOGIN") {
     const code = String(randomInt(100000, 1000000));
-    await prisma.otpCode.create({ data: { identifier, purpose, code: hash(code), expiresAt: new Date(Date.now() + 5 * 60_000) } });
+    await prisma.otpCode.create({
+      data: {
+        identifier,
+        purpose,
+        code: hash(code),
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      },
+    });
     if (isEmail(identifier)) {
       const { subject, html } = otpEmail(code, purpose);
       const result = await sendMail({ to: identifier, subject, html });
@@ -37,7 +50,7 @@ export class CustomerService {
     const email = input.email?.trim().toLowerCase();
 
     const existing =
-      await this.repo.findUser(phone) ||
+      (await this.repo.findUser(phone)) ||
       (email ? await this.repo.findUser(email) : null);
 
     if (existing) {
@@ -47,24 +60,75 @@ export class CustomerService {
       );
     }
 
-    const password = await bcrypt.hash(
-      randomBytes(24).toString("hex"),
-      10
-    );
+    const password = await bcrypt.hash(randomBytes(24).toString("hex"), 10);
 
-    const user = await this.repo.createCustomer({
-      firstName: input.firstName,
-      middleName: input.middleName || "",
-      lastName: input.lastName,
-      email:
-        email || `${phone.replace(/\D/g, "")}@customer.rocare.local`,
-      phone,
-      password,
+    let sponsorId: string | undefined = undefined;
+    if (input.referralCode) {
+      const trimmedCode = input.referralCode.trim();
+      const sponsorUser = await prisma.user.findFirst({
+        where: { referralCode: trimmedCode },
+      });
+      if (sponsorUser) {
+        sponsorId = sponsorUser.id;
+      } else {
+        const sponsorVendor = await prisma.vendor.findFirst({
+          where: { referralCode: trimmedCode },
+        });
+        if (sponsorVendor) {
+          let linkedUser = await prisma.user.findFirst({
+            where: {
+              OR: [
+                ...(sponsorVendor.email ? [{ email: sponsorVendor.email }] : []),
+                { phone: sponsorVendor.phone },
+              ],
+            },
+          });
+          if (!linkedUser) {
+            linkedUser = await prisma.user.create({
+              data: {
+                firstName: sponsorVendor.fullName.split(" ")[0] || "Vendor",
+                lastName: sponsorVendor.fullName.split(" ").slice(1).join(" ") || "",
+                email:
+                  sponsorVendor.email ||
+                  `${sponsorVendor.phone.replace(/\D/g, "")}@vendor.rocare.local`,
+                phone: sponsorVendor.phone,
+                password: sponsorVendor.password,
+                role: "VENDOR" as any,
+                referralCode: sponsorVendor.referralCode,
+              },
+            });
+          }
+          sponsorId = linkedUser.id;
+        }
+      }
+    }
+
+    // Generate user referral code
+    const referralCode = `ROC-${randomInt(100000, 999999)}`;
+
+    const user = await prisma.user.create({
+      data: {
+        firstName: input.firstName,
+        middleName: input.middleName || "",
+        lastName: input.lastName,
+        email: email || `${phone.replace(/\D/g, "")}@customer.rocare.local`,
+        phone,
+        password,
+        sponsorId,
+        referralCode,
+        customerProfile: { create: {} },
+      },
     });
 
     await this.issueOtp(phone, "SIGNUP");
     await logActivity(user.id, "CUSTOMER_SIGNUP", { phone: user.phone, email: user.email });
-    if (email) await sendMailSafe({ to: email, subject: "Welcome to ROCARE", html: simpleEmail("Welcome to ROCARE", "Your customer account has been created successfully.") });
+    if (email) {
+      await sendMailSafe({
+        to: email,
+        subject: "Welcome to ROCARE",
+        html: simpleEmail("Welcome to ROCARE", "Your customer account has been created successfully."),
+      });
+    }
 
     return {
       customerId: user.id,
@@ -75,30 +139,57 @@ export class CustomerService {
   }
 
   async sendOtp(identifierInput: string, purpose: "SIGNUP" | "LOGIN") {
-    const identifier = isEmail(identifierInput) ? normalizeIdentifier(identifierInput) : normalizeVendorPhone(identifierInput);
+    const identifier = isEmail(identifierInput)
+      ? normalizeIdentifier(identifierInput)
+      : normalizeVendorPhone(identifierInput);
     const user = await this.repo.findUser(identifier);
-    if (!user || user.role !== "CLIENT" || user.deletedAt) throw createHttpError(404, "Customer not found.");
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(404, "Customer not found.");
+    }
     await this.issueOtp(identifier, purpose);
     return { sent: true, channel: isEmail(identifier) ? "EMAIL" : "PHONE", expiresIn: 300 };
   }
 
   async verifyOtp(identifierInput: string, code: string, purpose: "SIGNUP" | "LOGIN") {
-    const identifier = isEmail(identifierInput) ? normalizeIdentifier(identifierInput) : normalizeVendorPhone(identifierInput);
-    const otp = await prisma.otpCode.findFirst({ where: { identifier, purpose, code: hash(code), used: false, expiresAt: { gt: new Date() } }, orderBy: { createdAt: "desc" } });
+    const identifier = isEmail(identifierInput)
+      ? normalizeIdentifier(identifierInput)
+      : normalizeVendorPhone(identifierInput);
+    const otp = await prisma.otpCode.findFirst({
+      where: { identifier, purpose, code: hash(code), used: false, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    });
     if (!otp) throw createHttpError(400, "Invalid or expired OTP.");
     const user = await this.repo.findUser(identifier);
-    if (!user || user.role !== "CLIENT" || user.deletedAt) throw createHttpError(404, "Customer not found.");
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(404, "Customer not found.");
+    }
     await prisma.otpCode.update({ where: { id: otp.id }, data: { used: true } });
-    if (purpose === "SIGNUP" && user.phone === identifier) await prisma.customer.update({ where: { userId: user.id }, data: { phoneVerified: true } });
-    await logActivity(user.id, purpose === "LOGIN" ? "CUSTOMER_LOGIN_OTP" : "CUSTOMER_PHONE_VERIFIED", { channel: isEmail(identifier) ? "EMAIL" : "PHONE" });
-    if (purpose === "LOGIN") await sendMailSafe({ to: user.email, subject: "ROCARE login successful", html: simpleEmail("Login successful", "Your ROCARE customer account was accessed successfully.") });
+    if (purpose === "SIGNUP" && user.phone === identifier) {
+      await prisma.customer.update({ where: { userId: user.id }, data: { phoneVerified: true } });
+    }
+    await logActivity(user.id, purpose === "LOGIN" ? "CUSTOMER_LOGIN_OTP" : "CUSTOMER_PHONE_VERIFIED", {
+      channel: isEmail(identifier) ? "EMAIL" : "PHONE",
+    });
+    if (purpose === "LOGIN") {
+      await sendMailSafe({
+        to: user.email,
+        subject: "ROCARE login successful",
+        html: simpleEmail("Login successful", "Your ROCARE customer account was accessed successfully."),
+      });
+    }
     return { verified: true, accessToken: signCustomerAccessToken(user.id), customerId: user.id };
   }
 
   async profile(userId: string) {
     const user = await this.repo.findUserById(userId);
-    if (!user || user.role !== "CLIENT" || user.deletedAt) throw createHttpError(404, "Customer not found.");
-    return user;
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(404, "Customer not found.");
+    }
+    const rankProgress = this.mlmService.getRankProgress(user.bv.toNumber());
+    return {
+      ...user,
+      rankProgress,
+    };
   }
 
   async addresses(userId: string) {
@@ -126,5 +217,37 @@ export class CustomerService {
     if (!profile) throw createHttpError(404, "Customer profile not found.");
     const result = await this.repo.deleteAddress(profile.id, id);
     if (!result.count) throw createHttpError(404, "Address not found.");
+  }
+
+  /**
+   * Customer creates a service lead
+   */
+  async createLead(userId: string, data: any) {
+    const user = await this.profile(userId);
+
+    const lead = await prisma.lead.create({
+      data: {
+        customerName: data.customerName || `${user.firstName} ${user.lastName}`,
+        phone: data.phone || user.phone || "",
+        email: data.email || user.email,
+        address: data.address,
+        district: data.district,
+        pincode: data.pincode,
+        specialization: data.specialization,
+        serviceType: data.serviceType,
+        issue: data.issue,
+        serviceId: data.serviceId,
+        productId: data.productId,
+        estimatedAmount: data.estimatedAmount,
+        isReleased: false,
+        leadCreatedByType: "CUSTOMER",
+        createdById: userId,
+        status: LeadStatus.NEW,
+        source: "ALL",
+      },
+    });
+
+    await logActivity(userId, "LEAD_CREATED", { leadId: lead.id });
+    return lead;
   }
 }

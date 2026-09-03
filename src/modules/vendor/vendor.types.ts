@@ -27,6 +27,11 @@ export interface VendorPublicProfile {
   profileStatus: VendorProfileStatus;
   rejectionReason: string | null;
   referralCode: string | null;
+  rank?: string;
+  rankProgress?: any;
+  pv?: number;
+  bv?: number;
+  totalEarnings?: number;
   createdAt: Date;
   updatedAt: Date;
   kyc: {
