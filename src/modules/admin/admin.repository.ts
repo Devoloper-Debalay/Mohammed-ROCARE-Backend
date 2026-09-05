@@ -856,13 +856,20 @@ export class AdminRepository {
     });
   }
 
+  findProductById(id: string) {
+    return this.prisma.product.findUnique({
+      where: { id },
+      include: { dynamicCategory: true, branch: true, inventory: true },
+    });
+  }
+
   listProducts(where: Prisma.ProductWhereInput, skip: number, take: number) {
     return this.prisma.product.findMany({
       where,
       skip,
       take,
       orderBy: { createdAt: "desc" },
-      include: { dynamicCategory: true },
+      include: { dynamicCategory: true, branch: true, inventory: true },
     });
   }
 
@@ -880,6 +887,47 @@ export class AdminRepository {
 
   deleteProduct(id: string) {
     return this.prisma.product.update({ where: { id }, data: { isActive: false } });
+  }
+
+  listParts(where: Prisma.PartWhereInput, skip: number, take: number) {
+    return this.prisma.part.findMany({
+      where,
+      skip,
+      take,
+      orderBy: { createdAt: "desc" },
+      include: { inventory: { include: { branch: true } } },
+    });
+  }
+
+  countParts(where: Prisma.PartWhereInput) {
+    return this.prisma.part.count({ where });
+  }
+
+  findPartById(id: string) {
+    return this.prisma.part.findUnique({
+      where: { id },
+      include: { inventory: { include: { branch: true } } },
+    });
+  }
+
+  createPart(data: Prisma.PartUncheckedCreateInput, branchId?: string, stock = 0) {
+    return this.prisma.$transaction(async (tx) => {
+      const part = await tx.part.create({ data });
+      if (branchId) {
+        await tx.inventory.create({
+          data: { partId: part.id, branchId, quantity: stock },
+        });
+      }
+      return part;
+    });
+  }
+
+  updatePart(id: string, data: Prisma.PartUncheckedUpdateInput) {
+    return this.prisma.part.update({ where: { id }, data });
+  }
+
+  deletePart(id: string) {
+    return this.prisma.part.update({ where: { id }, data: { isActive: false } });
   }
 
   listServices(where: Prisma.ServiceWhereInput, skip: number, take: number) {

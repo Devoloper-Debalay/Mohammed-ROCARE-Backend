@@ -5,6 +5,7 @@ import { ProductsController } from "./products.controller";
 import { requireAdminAuth, requireAdminRole } from "../../middlewares/admin-auth.middleware";
 import { requireCustomerAuth } from "../customer/customer.middleware";
 import { dtoValidation } from "../../middlewares/dtoValidation";
+import { upload } from "../../middlewares/upload";
 import { ProductDto, PartDto, InventoryAdjustDto, CategoryDto, ProductReviewDto } from "./products.dto";
 import { Role } from "../../generated/prisma/enums";
 
@@ -30,12 +31,34 @@ r.post("/admin/categories", dtoValidation(CategoryDto), c.createCategory);
 r.patch("/admin/categories/:id", dtoValidation(CategoryDto), c.updateCategory);
 r.delete("/admin/categories/:id", c.deleteCategory);
 
-r.post("/admin/products", dtoValidation(ProductDto), c.createProduct);
-r.patch("/admin/products/:id", dtoValidation(ProductDto), c.updateProduct);
+r.post(
+  "/admin/products",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(ProductDto),
+  c.createProduct
+);
+r.patch(
+  "/admin/products/:id",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(ProductDto),
+  c.updateProduct
+);
 r.delete("/admin/products/:id", c.deleteProduct);
+r.post("/admin/products/upload-image", upload.single("image"), c.uploadProductImage);
 
-r.post("/admin/parts", dtoValidation(PartDto), c.createPart);
-r.patch("/admin/parts/:id", dtoValidation(PartDto), c.updatePart);
+r.post(
+  "/admin/parts",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(PartDto),
+  c.createPart
+);
+r.patch(
+  "/admin/parts/:id",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(PartDto),
+  c.updatePart
+);
+r.post("/admin/parts/upload-image", upload.single("image"), c.uploadPartImage);
 
 r.get("/admin/inventory", c.inventory);
 r.patch("/admin/inventory/:id", dtoValidation(InventoryAdjustDto), c.adjust);

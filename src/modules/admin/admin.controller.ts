@@ -12,6 +12,28 @@ function adminId(res: Response): string {
   return id;
 }
 
+function extractUploadedBuffers(req: Request): Buffer[] {
+  const buffers: Buffer[] = [];
+  if (req.file?.buffer) {
+    buffers.push(req.file.buffer);
+  }
+  if (Array.isArray(req.files)) {
+    for (const f of req.files) {
+      if (f?.buffer) buffers.push(f.buffer);
+    }
+  } else if (req.files && typeof req.files === "object") {
+    for (const key of Object.keys(req.files)) {
+      const arr = (req.files as Record<string, Express.Multer.File[]>)[key];
+      if (Array.isArray(arr)) {
+        for (const f of arr) {
+          if (f?.buffer) buffers.push(f.buffer);
+        }
+      }
+    }
+  }
+  return buffers;
+}
+
 @injectable()
 export class AdminController {
   constructor(
@@ -430,11 +452,24 @@ export class AdminController {
     }
   };
 
-  createProduct = async (req: Request, res: Response, next: NextFunction) => {
+  product = async (req: Request, res: Response, next: NextFunction) => {
     try {
       sendSuccess(
         res,
-        await this.service.createProduct(adminId(res), req.body),
+        await this.service.product(adminId(res), req.params.productId as string),
+        "Product fetched."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  createProduct = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(
+        res,
+        await this.service.createProduct(adminId(res), req.body, imageBuffers),
         "Product created.",
         201
       );
@@ -445,11 +480,113 @@ export class AdminController {
 
   updateProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
+      const imageBuffers = extractUploadedBuffers(req);
       sendSuccess(
         res,
-        await this.service.updateProduct(adminId(res), req.params.productId as string, req.body),
+        await this.service.updateProduct(adminId(res), req.params.productId as string, req.body, imageBuffers),
         "Product updated."
       );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  deleteProduct = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.service.deleteProduct(adminId(res), req.params.productId as string),
+        "Product deleted."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  uploadProductImage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const buffers = extractUploadedBuffers(req);
+      if (buffers.length === 0) throw createHttpError(400, "Image file is required.");
+      const url = await this.service.uploadProductImage(buffers[0]);
+      sendSuccess(res, { url }, "Product image uploaded.", 201);
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  parts = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.service.parts(
+          adminId(res),
+          Number(req.query.page ?? 1),
+          Number(req.query.limit ?? 20)
+        ),
+        "Parts fetched."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  part = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.service.part(adminId(res), req.params.partId as string),
+        "Part fetched."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  createPart = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(
+        res,
+        await this.service.createPart(adminId(res), req.body, imageBuffers),
+        "Part created.",
+        201
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  updatePart = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(
+        res,
+        await this.service.updatePart(adminId(res), req.params.partId as string, req.body, imageBuffers),
+        "Part updated."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  deletePart = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.service.deletePart(adminId(res), req.params.partId as string),
+        "Part deleted."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  uploadPartImage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const buffers = extractUploadedBuffers(req);
+      if (buffers.length === 0) throw createHttpError(400, "Image file is required.");
+      const url = await this.service.uploadPartImage(buffers[0]);
+      sendSuccess(res, { url }, "Part image uploaded.", 201);
     } catch (e) {
       next(e);
     }

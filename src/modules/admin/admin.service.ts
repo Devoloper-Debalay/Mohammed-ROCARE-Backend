@@ -18,6 +18,11 @@ import { sendMail } from "../../utils/mailer";
 import { adminWelcomeEmail } from "../../utils/vendorMailTemplates";
 import { generateRandomPassword } from "../../utils/passwordGenerator";
 import {
+  uploadProductImage,
+  uploadPartImage,
+  uploadMultipleImages,
+} from "../../utils/uploadProductImage";
+import {
   CreateVendorDto,
   AdminCreateLeadDto,
   PriceAndReleaseLeadDto,
@@ -32,6 +37,96 @@ import { randomInt } from "crypto";
 
 const SALT_ROUNDS = 10;
 const DEFAULT_COMMISSION_PERCENT = 10;
+
+function parseBoolean(val: any): boolean | undefined {
+  if (val === undefined || val === null || val === "") return undefined;
+  if (val === true || val === "true" || val === 1 || val === "1") return true;
+  if (val === false || val === "false" || val === 0 || val === "0") return false;
+  return Boolean(val);
+}
+
+function parseNumber(val: any): number | undefined {
+  if (val === undefined || val === null || val === "") return undefined;
+  const num = Number(val);
+  return isNaN(num) ? undefined : num;
+}
+
+function parseArray(val: any): string[] | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [val];
+    } catch {
+      return [val];
+    }
+  }
+  return [String(val)];
+}
+
+function parseJson(val: any): Record<string, any> | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function cleanProductInput(input: any): any {
+  if (!input || typeof input !== "object") return {};
+  const result: any = {};
+
+  if (input.name !== undefined) result.name = String(input.name);
+  if (input.category !== undefined) result.category = input.category || null;
+  if (input.categoryId !== undefined) result.categoryId = input.categoryId || null;
+  if (input.brand !== undefined) result.brand = input.brand ? String(input.brand) : null;
+  if (input.description !== undefined) result.description = input.description ? String(input.description) : null;
+  if (input.mrp !== undefined) result.mrp = parseNumber(input.mrp);
+  if (input.price !== undefined) result.price = parseNumber(input.price);
+  if (input.discountPercent !== undefined) result.discountPercent = parseNumber(input.discountPercent);
+  if (input.vendorWholesalePrice !== undefined) result.vendorWholesalePrice = parseNumber(input.vendorWholesalePrice);
+  if (input.bulkMinQty !== undefined) result.bulkMinQty = parseNumber(input.bulkMinQty) ?? 1;
+  if (input.bulkDiscountPercent !== undefined) result.bulkDiscountPercent = parseNumber(input.bulkDiscountPercent);
+  if (input.referralDiscountPercent !== undefined) result.referralDiscountPercent = parseNumber(input.referralDiscountPercent);
+  if (input.isPartOnlyForVendor !== undefined) result.isPartOnlyForVendor = parseBoolean(input.isPartOnlyForVendor) ?? false;
+  if (input.bulkQtyDiscount !== undefined) result.bulkQtyDiscount = parseBoolean(input.bulkQtyDiscount) ?? false;
+  if (input.pv !== undefined) result.pv = parseNumber(input.pv) ?? 0;
+  if (input.bv !== undefined) result.bv = parseNumber(input.bv) ?? 0;
+
+  const stockVal = input.stock ?? input.stockQuantity ?? input.quantity;
+  if (stockVal !== undefined) result.stock = parseNumber(stockVal) ?? 0;
+
+  if (input.images !== undefined) result.images = parseArray(input.images) ?? [];
+  if (input.features !== undefined) result.features = parseArray(input.features);
+  if (input.specifications !== undefined) result.specifications = parseJson(input.specifications);
+  if (input.isActive !== undefined) result.isActive = parseBoolean(input.isActive) ?? true;
+  if (input.branchId !== undefined) result.branchId = input.branchId || null;
+
+  return result;
+}
+
+function cleanPartInput(input: any): any {
+  if (!input || typeof input !== "object") return {};
+  const result: any = {};
+
+  if (input.name !== undefined) result.name = String(input.name);
+  if (input.description !== undefined) result.description = input.description ? String(input.description) : null;
+  if (input.price !== undefined) result.price = parseNumber(input.price);
+
+  const stockVal = input.stock ?? input.stockQuantity ?? input.quantity;
+  if (stockVal !== undefined) result.stock = parseNumber(stockVal) ?? 0;
+
+  if (input.images !== undefined) result.images = parseArray(input.images) ?? [];
+  if (input.isActive !== undefined) result.isActive = parseBoolean(input.isActive) ?? true;
+
+  return result;
+}
 
 @injectable()
 export class AdminService {
@@ -564,23 +659,145 @@ export class AdminService {
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async createProduct(userId: string, data: Prisma.ProductUncheckedCreateInput) {
+  async product(userId: string, id: string) {
     const user = await this.context(userId);
-    const branchId = user.role === Role.ADMIN ? user.adminProfile?.branchId : data.branchId;
-    return this.repo.createProduct({ ...data, branchId: branchId || undefined });
+    const product = await this.repo.findProductById(id);
+    if (!product) throw createHttpError(404, "Product not found.");
+    if (user.role === Role.ADMIN && product.branchId && product.branchId !== user.adminProfile?.branchId) {
+      throw createHttpError(403, "Product is outside your branch.");
+    }
+    return product;
   }
 
-  async updateProduct(userId: string, id: string, data: Prisma.ProductUncheckedUpdateInput) {
+  async createProduct(
+    userId: string,
+    data: Prisma.ProductUncheckedCreateInput,
+    imageBuffers?: Buffer[]
+  ) {
+    const user = await this.context(userId);
+    const branchId = user.role === Role.ADMIN ? user.adminProfile?.branchId : data.branchId;
+
+    const cleanedData = cleanProductInput(data);
+    let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      images = [...images, ...uploadedUrls];
+    }
+
+    return this.repo.createProduct({
+      ...cleanedData,
+      images,
+      branchId: branchId || undefined,
+    });
+  }
+
+  async updateProduct(
+    userId: string,
+    id: string,
+    data: Prisma.ProductUncheckedUpdateInput,
+    imageBuffers?: Buffer[]
+  ) {
     const user = await this.context(userId);
     const existing = await this.repo.listProducts({ id }, 0, 1);
     if (!existing[0]) throw createHttpError(404, "Product not found.");
     if (user.role === Role.ADMIN && existing[0].branchId !== user.adminProfile?.branchId) {
       throw createHttpError(403, "Product is outside your branch.");
     }
+
+    let images = data.images as string[] | undefined;
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing[0].images;
+      images = [...baseImages, ...uploadedUrls];
+    }
+
     const safeData = user.role === Role.ADMIN
       ? (() => { const { branchId: _branchId, ...rest } = data as any; return rest; })()
       : data;
-    return this.repo.updateProduct(id, safeData);
+
+    const cleanedData = cleanProductInput(safeData);
+
+    if (images !== undefined) {
+      cleanedData.images = images;
+    }
+
+    return this.repo.updateProduct(id, cleanedData);
+  }
+
+  async deleteProduct(userId: string, id: string) {
+    const user = await this.context(userId);
+    const existing = await this.repo.listProducts({ id }, 0, 1);
+    if (!existing[0]) throw createHttpError(404, "Product not found.");
+    if (user.role === Role.ADMIN && existing[0].branchId !== user.adminProfile?.branchId) {
+      throw createHttpError(403, "Product is outside your branch.");
+    }
+    return this.repo.deleteProduct(id);
+  }
+
+  async parts(userId: string, page: number, limit: number) {
+    await this.context(userId);
+    const where: Prisma.PartWhereInput = { isActive: true };
+    const [data, total] = await Promise.all([
+      this.repo.listParts(where, (page - 1) * limit, limit),
+      this.repo.countParts(where),
+    ]);
+    return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
+  }
+
+  async part(userId: string, id: string) {
+    await this.context(userId);
+    const part = await this.repo.findPartById(id);
+    if (!part) throw createHttpError(404, "Part not found.");
+    return part;
+  }
+
+  async createPart(userId: string, data: any, imageBuffers?: Buffer[]) {
+    const user = await this.context(userId);
+    const branchId = user.role === Role.ADMIN ? user.adminProfile?.branchId : data.branchId;
+
+    const cleanedData = cleanPartInput(data);
+    let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      images = [...images, ...uploadedUrls];
+    }
+
+    const { stock = 0, branchId: _ignored, ...catalog } = cleanedData;
+    return this.repo.createPart({ ...catalog, images }, branchId || undefined, stock);
+  }
+
+  async updatePart(userId: string, id: string, data: any, imageBuffers?: Buffer[]) {
+    await this.context(userId);
+    const existing = await this.repo.findPartById(id);
+    if (!existing) throw createHttpError(404, "Part not found.");
+
+    const cleanedData = cleanPartInput(data);
+    let images = cleanedData.images as string[] | undefined;
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing.images;
+      images = [...baseImages, ...uploadedUrls];
+    }
+    const updateData: any = { ...cleanedData };
+    if (images !== undefined) {
+      updateData.images = images;
+    }
+    return this.repo.updatePart(id, updateData);
+  }
+
+  async deletePart(userId: string, id: string) {
+    await this.context(userId);
+    const existing = await this.repo.findPartById(id);
+    if (!existing) throw createHttpError(404, "Part not found.");
+    return this.repo.deletePart(id);
+  }
+
+  async uploadProductImage(fileBuffer: Buffer) {
+    return uploadProductImage(fileBuffer, "rocare/products");
+  }
+
+  async uploadPartImage(fileBuffer: Buffer) {
+    return uploadPartImage(fileBuffer, "rocare/parts");
   }
 
   async services(userId: string, page: number, limit: number) {

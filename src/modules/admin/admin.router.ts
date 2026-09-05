@@ -3,6 +3,7 @@ import "../../container";
 import { container } from "tsyringe";
 import { AdminController } from "./admin.controller";
 import { dtoValidation } from "../../middlewares/dtoValidation";
+import { upload } from "../../middlewares/upload";
 import { requireAdminAuth, requireAdminRole } from "../../middlewares/admin-auth.middleware";
 import { Role } from "../../generated/prisma/enums";
 import {
@@ -18,6 +19,7 @@ import {
   OrderStatusDto,
   PaymentDecisionDto,
   ProductDto,
+  PartDto,
   ServiceDto,
   SettingDto,
   UserRoleDto,
@@ -89,10 +91,51 @@ router.get("/categories/:categoryId", controller.category);
 router.patch("/categories/:categoryId", dtoValidation(AdminCategoryDto), controller.updateCategory);
 router.delete("/categories/:categoryId", controller.deleteCategory);
 
-// Products & Services
+// Products
 router.get("/products", controller.products);
-router.post("/products", dtoValidation(ProductDto), controller.createProduct);
-router.patch("/products/:productId", dtoValidation(ProductDto), controller.updateProduct);
+router.post(
+  "/products",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(ProductDto),
+  controller.createProduct
+);
+router.get("/products/:productId", controller.product);
+router.patch(
+  "/products/:productId",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(ProductDto),
+  controller.updateProduct
+);
+router.delete("/products/:productId", controller.deleteProduct);
+router.post(
+  "/products/upload-image",
+  upload.single("image"),
+  controller.uploadProductImage
+);
+
+// Spare Parts
+router.get("/parts", controller.parts);
+router.post(
+  "/parts",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(PartDto),
+  controller.createPart
+);
+router.get("/parts/:partId", controller.part);
+router.patch(
+  "/parts/:partId",
+  upload.fields([{ name: "images" }, { name: "image" }, { name: "files" }, { name: "file" }]),
+  dtoValidation(PartDto),
+  controller.updatePart
+);
+router.delete("/parts/:partId", controller.deletePart);
+router.post(
+  "/parts/upload-image",
+  upload.single("image"),
+  controller.uploadPartImage
+);
+
+// Services
 router.get("/services", controller.services);
 router.post("/services", dtoValidation(ServiceDto), controller.createService);
 router.patch("/services/:serviceId", dtoValidation(ServiceDto), controller.updateService);

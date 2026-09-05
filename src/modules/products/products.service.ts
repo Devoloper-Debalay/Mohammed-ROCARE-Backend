@@ -3,8 +3,103 @@ import createHttpError from "http-errors";
 import prisma from "../../config/database";
 import { CategoryType, Role } from "../../generated/prisma/enums";
 import { ProductQueryDto } from "./products.dto";
+import {
+  uploadMultipleImages,
+  uploadProductImage,
+  uploadPartImage,
+} from "../../utils/uploadProductImage";
 
 type AdminScope = { role: Role; branchId?: string | null };
+
+function parseBoolean(val: any): boolean | undefined {
+  if (val === undefined || val === null || val === "") return undefined;
+  if (val === true || val === "true" || val === 1 || val === "1") return true;
+  if (val === false || val === "false" || val === 0 || val === "0") return false;
+  return Boolean(val);
+}
+
+function parseNumber(val: any): number | undefined {
+  if (val === undefined || val === null || val === "") return undefined;
+  const num = Number(val);
+  return isNaN(num) ? undefined : num;
+}
+
+function parseArray(val: any): string[] | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [val];
+    } catch {
+      return [val];
+    }
+  }
+  return [String(val)];
+}
+
+function parseJson(val: any): Record<string, any> | undefined {
+  if (val === undefined || val === null) return undefined;
+  if (typeof val === "object") return val;
+  if (typeof val === "string") {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+function cleanProductInput(input: any): any {
+  if (!input || typeof input !== "object") return {};
+  const result: any = {};
+
+  if (input.name !== undefined) result.name = String(input.name);
+  if (input.category !== undefined) result.category = input.category || null;
+  if (input.categoryId !== undefined) result.categoryId = input.categoryId || null;
+  if (input.brand !== undefined) result.brand = input.brand ? String(input.brand) : null;
+  if (input.description !== undefined) result.description = input.description ? String(input.description) : null;
+  if (input.mrp !== undefined) result.mrp = parseNumber(input.mrp);
+  if (input.price !== undefined) result.price = parseNumber(input.price);
+  if (input.discountPercent !== undefined) result.discountPercent = parseNumber(input.discountPercent);
+  if (input.vendorWholesalePrice !== undefined) result.vendorWholesalePrice = parseNumber(input.vendorWholesalePrice);
+  if (input.bulkMinQty !== undefined) result.bulkMinQty = parseNumber(input.bulkMinQty) ?? 1;
+  if (input.bulkDiscountPercent !== undefined) result.bulkDiscountPercent = parseNumber(input.bulkDiscountPercent);
+  if (input.referralDiscountPercent !== undefined) result.referralDiscountPercent = parseNumber(input.referralDiscountPercent);
+  if (input.isPartOnlyForVendor !== undefined) result.isPartOnlyForVendor = parseBoolean(input.isPartOnlyForVendor) ?? false;
+  if (input.bulkQtyDiscount !== undefined) result.bulkQtyDiscount = parseBoolean(input.bulkQtyDiscount) ?? false;
+  if (input.pv !== undefined) result.pv = parseNumber(input.pv) ?? 0;
+  if (input.bv !== undefined) result.bv = parseNumber(input.bv) ?? 0;
+
+  const stockVal = input.stock ?? input.stockQuantity ?? input.quantity;
+  if (stockVal !== undefined) result.stock = parseNumber(stockVal) ?? 0;
+
+  if (input.images !== undefined) result.images = parseArray(input.images) ?? [];
+  if (input.features !== undefined) result.features = parseArray(input.features);
+  if (input.specifications !== undefined) result.specifications = parseJson(input.specifications);
+  if (input.isActive !== undefined) result.isActive = parseBoolean(input.isActive) ?? true;
+  if (input.branchId !== undefined) result.branchId = input.branchId || null;
+
+  return result;
+}
+
+function cleanPartInput(input: any): any {
+  if (!input || typeof input !== "object") return {};
+  const result: any = {};
+
+  if (input.name !== undefined) result.name = String(input.name);
+  if (input.description !== undefined) result.description = input.description ? String(input.description) : null;
+  if (input.price !== undefined) result.price = parseNumber(input.price);
+
+  const stockVal = input.stock ?? input.stockQuantity ?? input.quantity;
+  if (stockVal !== undefined) result.stock = parseNumber(stockVal) ?? 0;
+
+  if (input.images !== undefined) result.images = parseArray(input.images) ?? [];
+  if (input.isActive !== undefined) result.isActive = parseBoolean(input.isActive) ?? true;
+
+  return result;
+}
 
 @injectable()
 export class ProductsService {
@@ -251,17 +346,26 @@ export class ProductsService {
   /**
    * Admin Product CRUD
    */
-  async createProduct(data: any, scope: AdminScope) {
+  async createProduct(data: any, scope: AdminScope, imageBuffers?: Buffer[]) {
     const branchId = scope.role === Role.ADMIN ? scope.branchId : data.branchId;
     if (scope.role === Role.ADMIN && !branchId) {
       throw createHttpError(403, "Admin is not assigned to a branch.");
     }
-    const { stock = 0, branchId: _ignored, ...catalog } = data;
+
+    const cleanedData = cleanProductInput(data);
+    let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      images = [...images, ...uploadedUrls];
+    }
+
+    const { stock = 0, branchId: _ignored, ...catalog } = cleanedData;
 
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
         data: {
           ...catalog,
+          images,
           branchId,
           stock,
         },
@@ -275,14 +379,28 @@ export class ProductsService {
     });
   }
 
-  async updateProduct(id: string, data: any) {
-    const { stock, branchId, ...catalog } = data;
+  async updateProduct(id: string, data: any, imageBuffers?: Buffer[]) {
+    const cleanedData = cleanProductInput(data);
+    let images = cleanedData.images as string[] | undefined;
+    if (imageBuffers && imageBuffers.length > 0) {
+      const existing = await prisma.product.findUnique({ where: { id } });
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing?.images ?? [];
+      images = [...baseImages, ...uploadedUrls];
+    }
+
+    const { stock, branchId, ...catalog } = cleanedData;
+    const updateData: any = {
+      ...catalog,
+      ...(stock !== undefined ? { stock } : {}),
+    };
+    if (images !== undefined) {
+      updateData.images = images;
+    }
+
     return prisma.product.update({
       where: { id },
-      data: {
-        ...catalog,
-        ...(stock !== undefined ? { stock } : {}),
-      },
+      data: updateData,
     });
   }
 
@@ -310,14 +428,22 @@ export class ProductsService {
     return { data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async createPart(data: any, scope: AdminScope) {
+  async createPart(data: any, scope: AdminScope, imageBuffers?: Buffer[]) {
     const branchId = scope.role === Role.ADMIN ? scope.branchId : data.branchId;
     if (scope.role === Role.ADMIN && !branchId) {
       throw createHttpError(403, "Admin is not assigned to a branch.");
     }
-    const { stock = 0, branchId: _ignored, ...catalog } = data;
+
+    const cleanedData = cleanPartInput(data);
+    let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
+    if (imageBuffers && imageBuffers.length > 0) {
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      images = [...images, ...uploadedUrls];
+    }
+
+    const { stock = 0, branchId: _ignored, ...catalog } = cleanedData;
     return prisma.$transaction(async (tx) => {
-      const part = await tx.part.create({ data: catalog });
+      const part = await tx.part.create({ data: { ...catalog, images } });
       if (branchId) {
         await tx.inventory.create({
           data: { partId: part.id, branchId, quantity: stock },
@@ -327,9 +453,29 @@ export class ProductsService {
     });
   }
 
-  async updatePart(id: string, data: any) {
-    const { stock, branchId, ...catalog } = data;
-    return prisma.part.update({ where: { id }, data: catalog });
+  async updatePart(id: string, data: any, imageBuffers?: Buffer[]) {
+    const cleanedData = cleanPartInput(data);
+    let images = cleanedData.images as string[] | undefined;
+    if (imageBuffers && imageBuffers.length > 0) {
+      const existing = await prisma.part.findUnique({ where: { id } });
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing?.images ?? [];
+      images = [...baseImages, ...uploadedUrls];
+    }
+
+    const updateData: any = { ...cleanedData };
+    if (images !== undefined) {
+      updateData.images = images;
+    }
+    return prisma.part.update({ where: { id }, data: updateData });
+  }
+
+  async uploadProductImage(fileBuffer: Buffer) {
+    return uploadProductImage(fileBuffer, "rocare/products");
+  }
+
+  async uploadPartImage(fileBuffer: Buffer) {
+    return uploadPartImage(fileBuffer, "rocare/parts");
   }
 
   async inventory(scope: AdminScope, page = 1, limit = 50) {

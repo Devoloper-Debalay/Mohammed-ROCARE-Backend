@@ -1,8 +1,31 @@
 import { injectable, inject } from "tsyringe";
 import { Request, Response, NextFunction } from "express";
+import createHttpError from "http-errors";
 import { ProductsService } from "./products.service";
 import { sendSuccess } from "../../shared/response";
 import { CategoryType } from "../../generated/prisma/enums";
+
+function extractUploadedBuffers(req: Request): Buffer[] {
+  const buffers: Buffer[] = [];
+  if (req.file?.buffer) {
+    buffers.push(req.file.buffer);
+  }
+  if (Array.isArray(req.files)) {
+    for (const f of req.files) {
+      if (f?.buffer) buffers.push(f.buffer);
+    }
+  } else if (req.files && typeof req.files === "object") {
+    for (const key of Object.keys(req.files)) {
+      const arr = (req.files as Record<string, Express.Multer.File[]>)[key];
+      if (Array.isArray(arr)) {
+        for (const f of arr) {
+          if (f?.buffer) buffers.push(f.buffer);
+        }
+      }
+    }
+  }
+  return buffers;
+}
 
 @injectable()
 export class ProductsController {
@@ -108,7 +131,8 @@ export class ProductsController {
 
   createProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      sendSuccess(res, await this.s.createProduct(req.body, this.scope(res)), "Product created.", 201);
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(res, await this.s.createProduct(req.body, this.scope(res), imageBuffers), "Product created.", 201);
     } catch (e) {
       next(e);
     }
@@ -116,7 +140,8 @@ export class ProductsController {
 
   updateProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      sendSuccess(res, await this.s.updateProduct(req.params.id as string, req.body), "Product updated.");
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(res, await this.s.updateProduct(req.params.id as string, req.body, imageBuffers), "Product updated.");
     } catch (e) {
       next(e);
     }
@@ -125,6 +150,17 @@ export class ProductsController {
   deleteProduct = async (req: Request, res: Response, next: NextFunction) => {
     try {
       sendSuccess(res, await this.s.deleteProduct(req.params.id as string), "Product deleted.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  uploadProductImage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const buffers = extractUploadedBuffers(req);
+      if (buffers.length === 0) throw createHttpError(400, "Image file is required.");
+      const url = await this.s.uploadProductImage(buffers[0]);
+      sendSuccess(res, { url }, "Product image uploaded.", 201);
     } catch (e) {
       next(e);
     }
@@ -140,7 +176,8 @@ export class ProductsController {
 
   createPart = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      sendSuccess(res, await this.s.createPart(req.body, this.scope(res)), "Part created.", 201);
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(res, await this.s.createPart(req.body, this.scope(res), imageBuffers), "Part created.", 201);
     } catch (e) {
       next(e);
     }
@@ -148,7 +185,19 @@ export class ProductsController {
 
   updatePart = async (req: Request, res: Response, next: NextFunction) => {
     try {
-      sendSuccess(res, await this.s.updatePart(req.params.id as string, req.body), "Part updated.");
+      const imageBuffers = extractUploadedBuffers(req);
+      sendSuccess(res, await this.s.updatePart(req.params.id as string, req.body, imageBuffers), "Part updated.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  uploadPartImage = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const buffers = extractUploadedBuffers(req);
+      if (buffers.length === 0) throw createHttpError(400, "Image file is required.");
+      const url = await this.s.uploadPartImage(buffers[0]);
+      sendSuccess(res, { url }, "Part image uploaded.", 201);
     } catch (e) {
       next(e);
     }

@@ -1,4 +1,4 @@
-import { Type } from "class-transformer";
+import { Type, Transform } from "class-transformer";
 import {
   IsArray,
   IsBoolean,
@@ -123,75 +123,193 @@ export class ProductDto {
   description?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   mrp?: number;
 
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   price!: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
   discountPercent?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   vendorWholesalePrice?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(1)
   bulkMinQty?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
   bulkDiscountPercent?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   @Max(100)
   referralDiscountPercent?: number;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "true" || value === true || value === 1 || value === "1") return true;
+    if (value === "false" || value === false || value === 0 || value === "0") return false;
+    return value;
+  })
   @IsBoolean()
   isPartOnlyForVendor?: boolean;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "true" || value === true || value === 1 || value === "1") return true;
+    if (value === "false" || value === false || value === 0 || value === "0") return false;
+    return value;
+  })
+  @IsBoolean()
+  bulkQtyDiscount?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   pv?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   bv?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsInt()
   @Min(0)
   stock?: number;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
   @IsArray()
   @IsString({ each: true })
   images?: string[];
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === "string") {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return value;
+      }
+    }
+    return value;
+  })
   specifications?: Record<string, any>;
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
   @IsArray()
   @IsString({ each: true })
   features?: string[];
 
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "true" || value === true || value === 1 || value === "1") return true;
+    if (value === "false" || value === false || value === 0 || value === "0") return false;
+    return value;
+  })
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+}
+
+export class PartDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  price!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  stock?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (Array.isArray(value)) return value;
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        return Array.isArray(parsed) ? parsed : [value];
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
+  @IsArray()
+  @IsString({ each: true })
+  images?: string[];
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === "true" || value === true || value === 1 || value === "1") return true;
+    if (value === "false" || value === false || value === 0 || value === "0") return false;
+    return value;
+  })
   @IsBoolean()
   isActive?: boolean;
 
