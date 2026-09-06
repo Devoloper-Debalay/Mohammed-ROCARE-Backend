@@ -1318,11 +1318,13 @@ model ChatbotMessage {
  * ──────────────────────────────
  */
 model Customer {
-  id            String   @id @default(uuid())
-  userId        String   @unique
-  phoneVerified Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  phoneVerified    Boolean  @default(false)
+  securityQuestion String?
+  securityAnswer   String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   addresses CustomerAddress[]
