@@ -16,10 +16,27 @@ export class CustomerSignupDto {
   @IsOptional() @IsString() @MaxLength(80) middleName?: string;
   @IsString() @IsNotEmpty() @MaxLength(80) lastName!: string;
   @IsOptional() @IsEmail() email?: string;
-  @IsString() @IsNotEmpty() phone!: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() identifier?: string;
+  @IsString() @IsNotEmpty() @Length(6, 128) password!: string;
   @IsOptional() @IsString() referralCode?: string; // Optional referral code on signup
+  @IsOptional() @IsString() securityQuestion?: string; // Security question (e.g. "What is your primary hometown?")
+  @IsOptional() @IsString() securityAnswer?: string; // Security answer used for password reset
+  @IsOptional() @IsString() homeTown?: string;
 }
 
+export class CustomerLoginDto {
+  @IsString() @IsNotEmpty() identifier!: string;
+  @IsString() @IsNotEmpty() password!: string;
+}
+
+export class CustomerResetPasswordDto {
+  @IsString() @IsNotEmpty() identifier!: string;
+  @IsString() @IsNotEmpty() securityAnswer!: string;
+  @IsString() @IsNotEmpty() @Length(6, 128) newPassword!: string;
+}
+
+/*
 export class CustomerOtpDto {
   @IsString() @IsNotEmpty() identifier!: string;
   @IsIn(["SIGNUP", "LOGIN"]) purpose!: "SIGNUP" | "LOGIN";
@@ -30,6 +47,7 @@ export class CustomerVerifyOtpDto {
   @IsString() @Length(6, 6) code!: string;
   @IsIn(["SIGNUP", "LOGIN"]) purpose!: "SIGNUP" | "LOGIN";
 }
+*/
 
 export class CustomerAddressDto {
   @IsString() @IsNotEmpty() label!: string;

@@ -7,8 +7,8 @@ import { dtoValidation } from "../../middlewares/dtoValidation";
 import { requireCustomerAuth } from "./customer.middleware";
 import {
   CustomerSignupDto,
-  CustomerOtpDto,
-  CustomerVerifyOtpDto,
+  CustomerLoginDto,
+  CustomerResetPasswordDto,
   CustomerAddressDto,
   CustomerCreateLeadDto,
 } from "./customer.dto";
@@ -24,8 +24,16 @@ const authLimiter = rateLimit({
 
 router.use("/auth", authLimiter);
 router.post("/auth/signup", dtoValidation(CustomerSignupDto), c.signup);
-router.post("/auth/login", dtoValidation(CustomerOtpDto), c.sendOtp);
+router.post("/auth/login", dtoValidation(CustomerLoginDto), c.login);
+router.post("/auth/signin", dtoValidation(CustomerLoginDto), c.login);
+router.get("/auth/security-question", c.getSecurityQuestion);
+router.post("/auth/reset-password", dtoValidation(CustomerResetPasswordDto), c.resetPassword);
+
+/*
+// OTP routes commented out
+router.post("/auth/send-otp", dtoValidation(CustomerOtpDto), c.sendOtp);
 router.post("/auth/verify-otp", dtoValidation(CustomerVerifyOtpDto), c.verifyOtp);
+*/
 
 router.use(requireCustomerAuth);
 router.get("/profile", c.profile);

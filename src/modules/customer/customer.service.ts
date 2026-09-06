@@ -25,6 +25,8 @@ export class CustomerService {
     @inject(MlmService) private readonly mlmService: MlmService
   ) {}
 
+  /*
+  // OTP service commented out
   private async issueOtp(identifier: string, purpose: "SIGNUP" | "LOGIN") {
     const code = String(randomInt(100000, 1000000));
     await prisma.otpCode.create({
@@ -44,13 +46,36 @@ export class CustomerService {
     }
     return code;
   }
+  */
 
   async signup(input: any) {
-    const phone = normalizeVendorPhone(input.phone);
-    const email = input.email?.trim().toLowerCase();
+    let phone: string | undefined;
+    let email: string | undefined;
+
+    if (input.phone) {
+      phone = normalizeVendorPhone(input.phone);
+    }
+    if (input.email) {
+      email = input.email.trim().toLowerCase();
+    }
+    if (input.identifier) {
+      if (isEmail(input.identifier)) {
+        email = email || input.identifier.trim().toLowerCase();
+      } else {
+        phone = phone || normalizeVendorPhone(input.identifier);
+      }
+    }
+
+    if (!phone && !email) {
+      throw createHttpError(400, "Phone number or email identifier is required.");
+    }
+
+    if (!input.password || typeof input.password !== "string" || input.password.length < 6) {
+      throw createHttpError(400, "Password is required and must be at least 6 characters.");
+    }
 
     const existing =
-      (await this.repo.findUser(phone)) ||
+      (phone ? await this.repo.findUser(phone) : null) ||
       (email ? await this.repo.findUser(email) : null);
 
     if (existing) {
@@ -60,7 +85,7 @@ export class CustomerService {
       );
     }
 
-    const password = await bcrypt.hash(randomBytes(24).toString("hex"), 10);
+    const password = await bcrypt.hash(input.password, 10);
 
     let sponsorId: string | undefined = undefined;
     if (input.referralCode) {
@@ -105,24 +130,31 @@ export class CustomerService {
 
     // Generate user referral code
     const referralCode = `ROC-${randomInt(100000, 999999)}`;
+    const homeTown = input.securityAnswer || input.homeTown || "Not mentioned yet.";
 
     const user = await prisma.user.create({
       data: {
         firstName: input.firstName,
         middleName: input.middleName || "",
         lastName: input.lastName,
-        email: email || `${phone.replace(/\D/g, "")}@customer.rocare.local`,
+        email: email || `${phone!.replace(/\D/g, "")}@customer.rocare.local`,
         phone,
         password,
+        homeTown,
         sponsorId,
         referralCode,
-        customerProfile: { create: {} },
+        customerProfile: { create: { phoneVerified: true } },
+      },
+      include: {
+        customerProfile: true,
       },
     });
 
-    await this.issueOtp(phone, "SIGNUP");
+    // OTP dispatch commented out
+    // await this.issueOtp(phone, "SIGNUP");
+
     await logActivity(user.id, "CUSTOMER_SIGNUP", { phone: user.phone, email: user.email });
-    if (email) {
+    if (email && !email.endsWith("@customer.rocare.local")) {
       await sendMailSafe({
         to: email,
         subject: "Welcome to ROCARE",
@@ -130,14 +162,139 @@ export class CustomerService {
       });
     }
 
+    const accessToken = signCustomerAccessToken(user.id);
+
     return {
+      accessToken,
       customerId: user.id,
-      phone: user.phone,
-      email: input.email,
-      otpSent: true,
+      customer: {
+        id: user.id,
+        firstName: user.firstName,
+        middleName: user.middleName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        referralCode: user.referralCode,
+        customerProfile: user.customerProfile,
+      },
     };
   }
 
+  async login(identifierInput: string, passwordInput: string) {
+    if (!identifierInput || !passwordInput) {
+      throw createHttpError(400, "Identifier and password are required.");
+    }
+
+    const identifier = isEmail(identifierInput)
+      ? normalizeIdentifier(identifierInput)
+      : normalizeVendorPhone(identifierInput);
+
+    const user = await this.repo.findUser(identifier);
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(401, "Invalid email/phone or password.");
+    }
+
+    if (!user.isActive) {
+      throw createHttpError(403, "Customer account is inactive. Please contact support.");
+    }
+
+    const matches = await bcrypt.compare(passwordInput, user.password);
+    if (!matches) {
+      throw createHttpError(401, "Invalid email/phone or password.");
+    }
+
+    const accessToken = signCustomerAccessToken(user.id);
+    await logActivity(user.id, "CUSTOMER_LOGIN", {
+      channel: isEmail(identifier) ? "EMAIL" : "PHONE",
+    });
+
+    return {
+      accessToken,
+      customerId: user.id,
+      customer: {
+        id: user.id,
+        firstName: user.firstName,
+        middleName: user.middleName,
+        lastName: user.lastName,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        referralCode: user.referralCode,
+        customerProfile: user.customerProfile,
+      },
+    };
+  }
+
+  async getSecurityQuestion(identifierInput: string) {
+    if (!identifierInput) throw createHttpError(400, "Identifier is required.");
+    const identifier = isEmail(identifierInput)
+      ? normalizeIdentifier(identifierInput)
+      : normalizeVendorPhone(identifierInput);
+
+    const user = await this.repo.findUser(identifier);
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(404, "Customer not found.");
+    }
+
+    return {
+      identifier,
+      securityQuestion: "What is your registered primary hometown / security answer?",
+    };
+  }
+
+  async resetPassword(identifierInput: string, securityAnswerInput: string, newPassword: string) {
+    if (!identifierInput || !securityAnswerInput || !newPassword) {
+      throw createHttpError(400, "Identifier, security answer, and new password are required.");
+    }
+    if (newPassword.length < 6) {
+      throw createHttpError(400, "Password must be at least 6 characters long.");
+    }
+
+    const identifier = isEmail(identifierInput)
+      ? normalizeIdentifier(identifierInput)
+      : normalizeVendorPhone(identifierInput);
+
+    const user = await this.repo.findUser(identifier);
+    if (!user || user.role !== "CLIENT" || user.deletedAt) {
+      throw createHttpError(404, "Customer not found.");
+    }
+
+    const savedAnswer = (user.homeTown || "").trim().toLowerCase();
+    const providedAnswer = securityAnswerInput.trim().toLowerCase();
+
+    if (savedAnswer && savedAnswer !== "not mentioned yet.") {
+      if (savedAnswer !== providedAnswer) {
+        throw createHttpError(400, "Incorrect security answer.");
+      }
+    } else {
+      // If user had no security answer previously set, set it on reset
+      await this.repo.updateUser(user.id, { homeTown: securityAnswerInput.trim() });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.repo.updatePassword(user.id, hashedPassword);
+
+    await logActivity(user.id, "CUSTOMER_PASSWORD_RESET", {
+      channel: isEmail(identifier) ? "EMAIL" : "PHONE",
+    });
+
+    if (user.email && !user.email.endsWith("@customer.rocare.local")) {
+      await sendMailSafe({
+        to: user.email,
+        subject: "ROCARE password updated",
+        html: simpleEmail("Password Updated", "Your ROCARE customer account password has been reset successfully."),
+      });
+    }
+
+    return {
+      success: true,
+      message: "Password reset successful. You can now login with your new password.",
+    };
+  }
+
+  /*
+  // OTP methods commented out
   async sendOtp(identifierInput: string, purpose: "SIGNUP" | "LOGIN") {
     const identifier = isEmail(identifierInput)
       ? normalizeIdentifier(identifierInput)
@@ -179,6 +336,7 @@ export class CustomerService {
     }
     return { verified: true, accessToken: signCustomerAccessToken(user.id), customerId: user.id };
   }
+  */
 
   async profile(userId: string) {
     const user = await this.repo.findUserById(userId);

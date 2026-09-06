@@ -31,6 +31,13 @@ export class CustomerRepository {
     return this.prisma.user.update({ where: { id }, data });
   }
 
+  updatePassword(id: string, password: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { password },
+    });
+  }
+
   addresses(customerId: string) {
     return this.prisma.customerAddress.findMany({ where: { customerId }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] });
   }

@@ -15,6 +15,38 @@ export class CustomerController {
     }
   };
 
+  login = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(res, await this.service.login(req.body.identifier, req.body.password), "Customer login successful.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  getSecurityQuestion = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const identifier = String(req.query.identifier || req.body.identifier || "");
+      sendSuccess(res, await this.service.getSecurityQuestion(identifier), "Security question retrieved.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.service.resetPassword(
+        req.body.identifier,
+        req.body.securityAnswer,
+        req.body.newPassword
+      );
+      sendSuccess(res, result, "Password reset successful.");
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  /*
+  // OTP handlers commented out
   sendOtp = async (req: Request, res: Response, next: NextFunction) => {
     try {
       sendSuccess(res, await this.service.sendOtp(req.body.identifier, req.body.purpose), "OTP sent.");
@@ -30,6 +62,7 @@ export class CustomerController {
       next(e);
     }
   };
+  */
 
   profile = async (req: Request, res: Response, next: NextFunction) => {
     try {
