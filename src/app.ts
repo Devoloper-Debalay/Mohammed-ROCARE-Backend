@@ -41,7 +41,7 @@ app.use("/api", mainRouter);
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
-    message: "ROCARE Backend API is up and running 🚀",
+    message: "Just24You Backend API is up and running 🚀",
   });
 });
 

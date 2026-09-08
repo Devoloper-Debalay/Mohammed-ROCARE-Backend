@@ -188,7 +188,9 @@ export class AdminService {
       district: data.district,
       state: data.state,
       pincode: data.pincode,
-      specialization: data.specialization, // single specialization
+      specializations: data.specializations ?? (data.specialization ? [data.specialization] : []),
+      // Keep the legacy single-value column in sync for any code that still reads it.
+      specialization: data.specializations?.[0] ?? data.specialization,
       experienceYears: data.experienceYears,
       skills: data.skills || [],
       branchId: branchId || undefined,
@@ -199,7 +201,7 @@ export class AdminService {
     await this.audit(userId, "VENDOR_CREATED_BY_ADMIN", "Vendor", vendor.id, {
       vendorCode,
       role: data.role,
-      specialization: data.specialization,
+      specializations: data.specializations ?? (data.specialization ? [data.specialization] : []),
       branchId,
     });
 
@@ -288,6 +290,12 @@ export class AdminService {
     const user = await this.context(userId);
     const branchId = user.role === Role.ADMIN ? user.adminProfile?.branchId : data.branchId;
 
+    // Direct-assign leads go straight to one vendor and skip the open pool.
+    // Everything else already carries price + coins + location + specialization
+    // from this same form, so there's no reason to make the admin release it
+    // separately — release it immediately so matching vendors see it right away.
+    const shouldRelease = data.isReleased ?? !data.assignedVendorId;
+
     const lead = await this.repo.createLead({
       customerName: data.customerName,
       phone: data.phone,
@@ -300,10 +308,11 @@ export class AdminService {
       issue: data.issue,
       estimatedAmount: data.estimatedAmount,
       leadPrice: data.leadPrice,
-      leadAcceptPrice: data.leadAcceptPrice,
-      leadAcceptanceCharge: data.leadAcceptPrice,
-      isReleased: data.isReleased ?? false,
-      releasedAt: data.isReleased ? new Date() : null,
+      leadAcceptPrice: data.leadAcceptPrice ?? data.leadAcceptanceCharge,
+      leadAcceptanceCharge: data.leadAcceptanceCharge ?? data.leadAcceptPrice,
+      assignedVendorId: data.assignedVendorId || undefined,
+      isReleased: shouldRelease,
+      releasedAt: shouldRelease ? new Date() : null,
       leadCreatedByType: "ADMIN",
       branchId: branchId || undefined,
       serviceId: data.serviceId,
@@ -680,7 +689,7 @@ export class AdminService {
     const cleanedData = cleanProductInput(data);
     let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/products");
       images = [...images, ...uploadedUrls];
     }
 
@@ -706,7 +715,7 @@ export class AdminService {
 
     let images = data.images as string[] | undefined;
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/products");
       const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing[0].images;
       images = [...baseImages, ...uploadedUrls];
     }
@@ -758,7 +767,7 @@ export class AdminService {
     const cleanedData = cleanPartInput(data);
     let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/parts");
       images = [...images, ...uploadedUrls];
     }
 
@@ -774,7 +783,7 @@ export class AdminService {
     const cleanedData = cleanPartInput(data);
     let images = cleanedData.images as string[] | undefined;
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/parts");
       const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing.images;
       images = [...baseImages, ...uploadedUrls];
     }
@@ -793,11 +802,11 @@ export class AdminService {
   }
 
   async uploadProductImage(fileBuffer: Buffer) {
-    return uploadProductImage(fileBuffer, "rocare/products");
+    return uploadProductImage(fileBuffer, "just24you/products");
   }
 
   async uploadPartImage(fileBuffer: Buffer) {
-    return uploadPartImage(fileBuffer, "rocare/parts");
+    return uploadPartImage(fileBuffer, "just24you/parts");
   }
 
   async services(userId: string, page: number, limit: number) {

@@ -16,13 +16,13 @@ export interface CustomerTokenPayload extends JwtPayload {
 export function signCustomerAccessToken(userId: string): string {
   return sign({ userId, role: "CLIENT", tokenType: "CUSTOMER_ACCESS" }, secret(), {
     expiresIn: (process.env.JWT_CUSTOMER_ACCESS_EXPIRES_IN || "1d") as any,
-    audience: "rocare-customer",
+    audience: "just24you-customer",
   });
 }
 
 export function verifyCustomerAccessToken(token: string): CustomerTokenPayload {
   try {
-    const payload = verify(token, secret(), { audience: "rocare-customer" }) as CustomerTokenPayload;
+    const payload = verify(token, secret(), { audience: "just24you-customer" }) as CustomerTokenPayload;
     if (payload.tokenType !== "CUSTOMER_ACCESS" || payload.role !== "CLIENT") {
       throw createHttpError(401, "Invalid customer token.");
     }

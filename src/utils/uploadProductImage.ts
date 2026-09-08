@@ -6,7 +6,7 @@ import { Readable } from "stream";
  */
 export async function uploadProductImage(
   fileBuffer: Buffer,
-  folder = "rocare/products"
+  folder = "just24you/products"
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -27,11 +27,11 @@ export async function uploadProductImage(
 }
 
 /**
- * Upload a spare part image buffer to Cloudinary under rocare/parts
+ * Upload a spare part image buffer to Cloudinary under just24you/parts
  */
 export async function uploadPartImage(
   fileBuffer: Buffer,
-  folder = "rocare/parts"
+  folder = "just24you/parts"
 ): Promise<string> {
   return uploadProductImage(fileBuffer, folder);
 }
@@ -41,7 +41,7 @@ export async function uploadPartImage(
  */
 export async function uploadMultipleImages(
   fileBuffers: Buffer[],
-  folder = "rocare/products"
+  folder = "just24you/products"
 ): Promise<string[]> {
   if (!fileBuffers || fileBuffers.length === 0) return [];
   return Promise.all(fileBuffers.map((buf) => uploadProductImage(buf, folder)));

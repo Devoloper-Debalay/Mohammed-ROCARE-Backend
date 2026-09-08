@@ -460,7 +460,12 @@ export class CreateVendorDto {
 
   @IsOptional()
   @IsString()
-  specialization?: string;
+  specialization?: string; // Deprecated — kept for backward compatibility, prefer specializations.
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  specializations?: string[];
 
   @IsOptional()
   @IsInt()
@@ -538,6 +543,11 @@ export class AdminCreateLeadDto {
   leadAcceptPrice?: number;
 
   @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  leadAcceptanceCharge?: number;
+
+  @IsOptional()
   @IsUUID()
   branchId?: string;
 
@@ -548,6 +558,10 @@ export class AdminCreateLeadDto {
   @IsOptional()
   @IsUUID()
   productId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  assignedVendorId?: string;
 
   @IsOptional()
   @IsBoolean()

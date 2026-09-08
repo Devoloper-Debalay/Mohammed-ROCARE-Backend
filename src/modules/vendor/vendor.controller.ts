@@ -129,11 +129,28 @@ export class VendorController {
     }
   };
 
-  recharge = async (req: Request, res: Response, next: NextFunction) => {
+  createRechargeOrder = async (req: Request, res: Response, next: NextFunction) => {
     try {
       sendSuccess(
         res,
-        await this.vendorService.recharge(getVendorId(req), req.body.amount),
+        await this.vendorService.createRechargeOrder(getVendorId(req), req.body.amount),
+        "Recharge order created."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  verifyRecharge = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+      sendSuccess(
+        res,
+        await this.vendorService.verifyRecharge(getVendorId(req), {
+          razorpayOrderId,
+          razorpayPaymentId,
+          razorpaySignature,
+        }),
         "Wallet recharged."
       );
     } catch (e) {
@@ -240,6 +257,47 @@ export class VendorController {
         res,
         await this.vendorService.completeLead(getVendorId(req), req.params.leadId as string),
         "Payment QR generated."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  completeCash = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.vendorService.completeLeadCash(getVendorId(req), req.params.leadId as string, req.body.amount),
+        "Job completed — cash payment recorded."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  createLeadRazorpayOrder = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      sendSuccess(
+        res,
+        await this.vendorService.createLeadRazorpayOrder(getVendorId(req), req.params.leadId as string),
+        "Payment order created."
+      );
+    } catch (e) {
+      next(e);
+    }
+  };
+
+  verifyLeadRazorpayPayment = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { razorpayOrderId, razorpayPaymentId, razorpaySignature } = req.body;
+      sendSuccess(
+        res,
+        await this.vendorService.verifyLeadRazorpayPayment(getVendorId(req), req.params.leadId as string, {
+          razorpayOrderId,
+          razorpayPaymentId,
+          razorpaySignature,
+        }),
+        "Job completed — payment verified."
       );
     } catch (e) {
       next(e);

@@ -153,7 +153,7 @@ export class OrderService {
 
     await sendMailSafe({
       to: (order as any).customer?.email,
-      subject: "ROCARE order created",
+      subject: "Just24You order created",
       html: simpleEmail(
         "Order created",
         `Your order ${order.id} has been created successfully. Total: ₹${order.totalAmount}`
@@ -193,7 +193,7 @@ export class OrderService {
             lastName: sponsorVendor.fullName.split(" ").slice(1).join(" ") || "",
             email:
               sponsorVendor.email ||
-              `${sponsorVendor.phone.replace(/\D/g, "")}@vendor.rocare.local`,
+              `${sponsorVendor.phone.replace(/\D/g, "")}@vendor.just24you.local`,
             phone: sponsorVendor.phone,
             password: sponsorVendor.password,
             role: "VENDOR" as any,
@@ -271,7 +271,7 @@ export class OrderService {
 
     await sendMailSafe({
       to: (order as any).customer?.email,
-      subject: "ROCARE order created",
+      subject: "Just24You order created",
       html: simpleEmail(
         "Order created",
         `Your order ${order.id} has been created successfully. Total: ₹${order.totalAmount}`
@@ -348,7 +348,7 @@ export class OrderService {
     await logActivity(userId, "ORDER_CANCELLED", { orderId: id });
     await sendMailSafe({
       to: (o as any).customer?.email,
-      subject: "ROCARE order cancelled",
+      subject: "Just24You order cancelled",
       html: simpleEmail("Order cancelled", `Your order ${id} has been cancelled.`),
     });
 
@@ -458,7 +458,7 @@ export class OrderService {
 
     await sendMailSafe({
       to: (updated as any).customer?.email,
-      subject: "ROCARE order update",
+      subject: "Just24You order update",
       html: simpleEmail("Order status updated", `Your order ${id} is now ${status}.`),
     });
 
@@ -520,7 +520,7 @@ export class OrderService {
 
     await sendMailSafe({
       to: (o as any).customer?.email,
-      subject: "ROCARE order accepted",
+      subject: "Just24You order accepted",
       html: simpleEmail(
         "Order accepted",
         `Your order ${id} has been accepted and assigned for processing.`
@@ -530,7 +530,7 @@ export class OrderService {
     if (v.email) {
       await sendMailSafe({
         to: v.email,
-        subject: "New ROCARE order assigned",
+        subject: "New Just24You order assigned",
         html: simpleEmail("New order assigned", `You have been assigned order ${id}.`),
       });
     }

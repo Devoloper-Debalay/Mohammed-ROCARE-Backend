@@ -1420,7 +1420,7 @@ export class ServiceRequestService {
 
     await sendMailSafe({
       to: customer.email,
-      subject: "ROCARE service request created",
+      subject: "Just24You service request created",
       html: simpleEmail(
         "Service request created",
         `Your service request ${result.request.id} has been created successfully and is currently ${result.request.status}.`,
@@ -1594,7 +1594,7 @@ export class ServiceRequestService {
 
     await sendMailSafe({
       to: (request as any).customer?.email,
-      subject: "ROCARE service request assigned",
+      subject: "Just24You service request assigned",
       html: simpleEmail(
         "Service request assigned",
         `Your service request ${updatedRequest.id} has been assigned to a service provider.`,
@@ -1884,7 +1884,7 @@ export class ServiceRequestService {
 
       await sendMailSafe({
         to: (request as any).customer?.email,
-        subject: "ROCARE service request accepted",
+        subject: "Just24You service request accepted",
         html: simpleEmail(
           "Service request accepted",
           `Your service request ${updatedRequest.id} has been accepted by a service provider.`,
@@ -2081,7 +2081,7 @@ export class ServiceRequestService {
     > = {
       start: {
         subject:
-          "ROCARE service request started",
+          "Just24You service request started",
 
         title:
           "Service request started",
@@ -2089,7 +2089,7 @@ export class ServiceRequestService {
 
       complete: {
         subject:
-          "ROCARE service request completed",
+          "Just24You service request completed",
 
         title:
           "Service request completed",
@@ -2097,7 +2097,7 @@ export class ServiceRequestService {
 
       deny: {
         subject:
-          "ROCARE service request denied",
+          "Just24You service request denied",
 
         title:
           "Service request denied",
@@ -2282,7 +2282,7 @@ export class ServiceRequestService {
       to: (request as any).customer?.email,
 
       subject:
-        "ROCARE service request assigned",
+        "Just24You service request assigned",
 
       html: simpleEmail(
         "Service request assigned",

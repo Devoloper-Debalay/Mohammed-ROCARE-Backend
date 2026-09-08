@@ -23,6 +23,7 @@ export interface VendorPublicProfile {
   experienceYears: number | null;
   skills: string[];
   specialization: string | null;
+  specializations: string[];
   verificationStatus: VendorVerificationStatus;
   profileStatus: VendorProfileStatus;
   rejectionReason: string | null;

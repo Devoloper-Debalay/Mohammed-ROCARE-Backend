@@ -19,5 +19,5 @@ export async function sendMailSafe(input: { to?: string | null; subject: string;
 
 export function simpleEmail(title: string, message: string) {
   const escaped = message.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-  return `<!doctype html><html><body style="font-family:Arial,sans-serif;line-height:1.5"><h2>${title}</h2><p>${escaped}</p><p>Regards,<br/>ROCARE Team</p></body></html>`;
+  return `<!doctype html><html><body style="font-family:Arial,sans-serif;line-height:1.5"><h2>${title}</h2><p>${escaped}</p><p>Regards,<br/>Just24You Team</p></body></html>`;
 }

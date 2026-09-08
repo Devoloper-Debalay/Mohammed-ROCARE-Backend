@@ -254,6 +254,7 @@ export class AdminRepository {
     state?: string;
     pincode?: string;
     specialization?: string;
+    specializations?: string[];
     experienceYears?: number;
     skills?: string[];
     branchId?: string;
@@ -308,6 +309,7 @@ export class AdminRepository {
       branchId?: string | null;
       district?: string;
       specialization?: string;
+      specializations?: string[];
     }
   ) {
     return this.prisma.vendor.update({
@@ -333,7 +335,7 @@ export class AdminRepository {
     const conditions: Prisma.VendorWhereInput[] = [];
 
     if (criteria.specialization) {
-      conditions.push({ specialization: criteria.specialization });
+      conditions.push({ specializations: { has: criteria.specialization } });
     }
 
     const locationConditions: Prisma.VendorWhereInput[] = [];
@@ -358,7 +360,7 @@ export class AdminRepository {
 
     return this.prisma.vendor.findMany({
       where,
-      select: { id: true, fullName: true, phone: true, email: true, specialization: true, district: true, pincode: true },
+      select: { id: true, fullName: true, phone: true, email: true, specializations: true, district: true, pincode: true },
     });
   }
 
@@ -912,7 +914,7 @@ export class AdminRepository {
 
   createPart(data: Prisma.PartUncheckedCreateInput, branchId?: string, stock = 0) {
     return this.prisma.$transaction(async (tx) => {
-      const part = await tx.part.create({ data });
+      const part = await tx.part.create({ data: { ...data, stock } });
       if (branchId) {
         await tx.inventory.create({
           data: { partId: part.id, branchId, quantity: stock },

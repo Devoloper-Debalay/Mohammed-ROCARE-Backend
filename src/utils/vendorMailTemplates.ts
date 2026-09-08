@@ -7,7 +7,7 @@ const wrap = (title: string, bodyHtml: string) => `
   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
     <h2 style="color: #0f4c81;">${title}</h2>
     ${bodyHtml}
-    <p style="color: #888; font-size: 12px; margin-top: 32px;">— ROCARE Vendor Platform</p>
+    <p style="color: #888; font-size: 12px; margin-top: 32px;">— Just24You Vendor Platform</p>
   </div>
 `;
 
@@ -18,7 +18,7 @@ export function otpEmail(code: string, purpose: string): MailContent {
     RESET_PASSWORD: "reset your password",
   };
   return {
-    subject: `Your ROCARE OTP: ${code}`,
+    subject: `Your Just24You OTP: ${code}`,
     html: wrap(
       "Your OTP Code",
       `<p>Use the code below to ${purposeLabel[purpose] ?? "continue"}:</p>
@@ -30,11 +30,11 @@ export function otpEmail(code: string, purpose: string): MailContent {
 
 export function adminWelcomeEmail(fullName: string, email: string, tempPassword: string, branchName?: string): MailContent {
   return {
-    subject: "Your ROCARE Admin Account",
+    subject: "Your Just24You Admin Account",
     html: wrap(
       "Admin Account Created",
       `<p>Hi ${fullName},</p>
-       <p>An admin account has been created for you on ROCARE${branchName ? ` for the <b>${branchName}</b> branch` : ""}.</p>
+       <p>An admin account has been created for you on Just24You${branchName ? ` for the <b>${branchName}</b> branch` : ""}.</p>
        <p>Login email: <b>${email}</b><br/>Temporary password: <b>${tempPassword}</b></p>
        <p>Please log in and change your password as soon as possible.</p>`
     ),
@@ -43,11 +43,11 @@ export function adminWelcomeEmail(fullName: string, email: string, tempPassword:
 
 export function registrationReceivedEmail(fullName: string, vendorCode: string): MailContent {
   return {
-    subject: "Welcome to ROCARE — Registration Received",
+    subject: "Welcome to Just24You — Registration Received",
     html: wrap(
       "Registration Received",
       `<p>Hi ${fullName},</p>
-       <p>Thanks for signing up as a ROCARE vendor. Your vendor code is <b>${vendorCode}</b>.</p>
+       <p>Thanks for signing up as a Just24You vendor. Your vendor code is <b>${vendorCode}</b>.</p>
        <p>Next, verify your phone number, then complete your KYC and bank details before submitting your profile for admin verification.</p>`
     ),
   };
@@ -56,11 +56,11 @@ export function registrationReceivedEmail(fullName: string, vendorCode: string):
 export function loginSuccessEmail(fullName: string, method: "PASSWORD" | "PHONE_OTP"): MailContent {
   const methodLabel = method === "PHONE_OTP" ? "phone OTP" : "password";
   return {
-    subject: "ROCARE Vendor Login Successful",
+    subject: "Just24You Vendor Login Successful",
     html: wrap(
       "Login Successful",
       `<p>Hi ${fullName},</p>
-       <p>Your ROCARE vendor account was successfully signed in using <b>${methodLabel}</b>.</p>
+       <p>Your Just24You vendor account was successfully signed in using <b>${methodLabel}</b>.</p>
        <p>If this was not you, please reset your password and contact support immediately.</p>`
     ),
   };
@@ -73,7 +73,7 @@ export function loginSuccessEmail(fullName: string, method: "PASSWORD" | "PHONE_
     RESET_PASSWORD: "reset your password",
   };
   return {
-    subject: `Your ROCARE OTP: ${code}`,
+    subject: `Your Just24You OTP: ${code}`,
     html: wrap(
       "Your OTP Code",
       `<p>Use the code below to ${purposeLabel[purpose] ?? "continue"}:</p>
@@ -85,7 +85,7 @@ export function loginSuccessEmail(fullName: string, method: "PASSWORD" | "PHONE_
 
 export function submittedForReviewEmail(fullName: string): MailContent {
   return {
-    subject: "Your ROCARE Profile is Under Review",
+    subject: "Your Just24You Profile is Under Review",
     html: wrap(
       "Profile Submitted",
       `<p>Hi ${fullName},</p>
@@ -96,7 +96,7 @@ export function submittedForReviewEmail(fullName: string): MailContent {
 
 export function profileVerifiedEmail(fullName: string): MailContent {
   return {
-    subject: "Your ROCARE Profile Has Been Verified",
+    subject: "Your Just24You Profile Has Been Verified",
     html: wrap(
       "Profile Verified",
       `<p>Hi ${fullName},</p>
@@ -107,7 +107,7 @@ export function profileVerifiedEmail(fullName: string): MailContent {
 
 export function profilePublishedEmail(fullName: string): MailContent {
   return {
-    subject: "You're Live on ROCARE!",
+    subject: "You're Live on Just24You!",
     html: wrap(
       "Profile Published",
       `<p>Hi ${fullName},</p>
@@ -118,7 +118,7 @@ export function profilePublishedEmail(fullName: string): MailContent {
 
 export function profileRejectedEmail(fullName: string, reason: string): MailContent {
   return {
-    subject: "ROCARE Profile Verification — Action Needed",
+    subject: "Just24You Profile Verification — Action Needed",
     html: wrap(
       "Verification Update",
       `<p>Hi ${fullName},</p>
@@ -131,7 +131,7 @@ export function profileRejectedEmail(fullName: string, reason: string): MailCont
 
 export function accountRestrictedEmail(fullName: string, contactEmail: string, contactPhone: string): MailContent {
   return {
-    subject: "Your ROCARE Account Has Been Restricted",
+    subject: "Your Just24You Account Has Been Restricted",
     html: wrap(
       "Account Restricted",
       `<p>Hi ${fullName},</p>
@@ -143,7 +143,7 @@ export function accountRestrictedEmail(fullName: string, contactEmail: string, c
 
 export function deletionRequestedEmail(fullName: string): MailContent {
   return {
-    subject: "ROCARE Account Deletion Request Received",
+    subject: "Just24You Account Deletion Request Received",
     html: wrap(
       "Deletion Request Received",
       `<p>Hi ${fullName},</p>
@@ -154,7 +154,7 @@ export function deletionRequestedEmail(fullName: string): MailContent {
 
 export function passwordChangedEmail(fullName: string): MailContent {
   return {
-    subject: "Your ROCARE Password Was Changed",
+    subject: "Your Just24You Password Was Changed",
     html: wrap(
       "Password Changed",
       `<p>Hi ${fullName},</p>

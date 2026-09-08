@@ -11,7 +11,7 @@ export class VendorAuthController {
   signup = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await this.authService.signup(req.body);
-      sendSuccess(res, result, "Signup successful. Verify your phone to continue.", 201);
+      sendSuccess(res, result, "Signup successful. Your account is pending admin approval.", 201);
     } catch (err) {
       next(err);
     }

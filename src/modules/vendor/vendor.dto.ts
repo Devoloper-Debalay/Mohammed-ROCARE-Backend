@@ -92,7 +92,13 @@ export class UpdateVendorProfileDto {
   @Expose()
   @IsOptional()
   @IsString()
-  specialization?: string; // Single specialization
+  specialization?: string; // Deprecated — kept for backward compatibility, prefer specializations.
+
+  @Expose()
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  specializations?: string[];
 }
 
 export class UpdateVendorBankDto {
@@ -155,8 +161,24 @@ export class ChangeVendorPasswordDto {
   newPassword!: string;
 }
 
-export class RechargeWalletDto {
+export class CreateWalletRechargeOrderDto {
   @Expose() @IsNumber() @Min(1) amount!: number;
+}
+
+export class VerifyWalletRechargeDto {
+  @Expose() @IsString() @IsNotEmpty() razorpayOrderId!: string;
+  @Expose() @IsString() @IsNotEmpty() razorpayPaymentId!: string;
+  @Expose() @IsString() @IsNotEmpty() razorpaySignature!: string;
+}
+
+export class CompleteCashPaymentDto {
+  @Expose() @IsNumber() @Min(0.01) amount!: number;
+}
+
+export class VerifyLeadRazorpayPaymentDto {
+  @Expose() @IsString() @IsNotEmpty() razorpayOrderId!: string;
+  @Expose() @IsString() @IsNotEmpty() razorpayPaymentId!: string;
+  @Expose() @IsString() @IsNotEmpty() razorpaySignature!: string;
 }
 
 export class WalletIssueDto {

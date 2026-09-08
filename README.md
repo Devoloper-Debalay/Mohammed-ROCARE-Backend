@@ -1,6 +1,6 @@
-# ROCARE_backend
+# Just24You_backend
 
-Backend API for **RO Care** — a multi-role RO (water purifier) service & sales management platform. Handles user/vendor/agent onboarding, product & service catalogs, lead management, order & delivery tracking, technician/service assignment, payments & invoicing, and admin/super-admin controls.
+Backend API for **Just24You** — a multi-role RO (water purifier) service & sales management platform. Handles user/vendor/agent onboarding, product & service catalogs, lead management, order & delivery tracking, technician/service assignment, payments & invoicing, and admin/super-admin controls.
 
 ## Tech Stack
 
@@ -69,8 +69,8 @@ prisma/
 ### Installation
 
 ```bash
-git clone https://github.com/ProgrammerSnehasish/ROCARE_backend.git
-cd ROCARE_backend
+git clone https://github.com/ProgrammerSnehasish/Just24You_backend.git
+cd Just24You_backend
 yarn install
 ```
 

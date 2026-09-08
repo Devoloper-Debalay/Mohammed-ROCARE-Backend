@@ -50,6 +50,7 @@ export class VendorRepository {
     pincode?: string;
     referralCode?: string;
     referredByVendorId?: string;
+    phoneVerified?: boolean;
   }) {
     return this.prisma.vendor.create({
       data: {
@@ -173,7 +174,7 @@ export class VendorRepository {
     district: string | null;
     city: string | null;
     pincode: string | null;
-    specialization: string | null;
+    specializations: string[];
   }): Prisma.LeadWhereInput {
     const openLeadConditions: Prisma.LeadWhereInput[] = [
       { status: LeadStatus.NEW },
@@ -181,11 +182,12 @@ export class VendorRepository {
       { isReleased: true },
     ];
 
-    // Single specialization match
-    if (vendor.specialization) {
+    // A vendor with one or more registered trades only sees leads matching
+    // one of them (or leads with no specialization set at all).
+    if (vendor.specializations.length > 0) {
       openLeadConditions.push({
         OR: [
-          { specialization: vendor.specialization },
+          { specialization: { in: vendor.specializations } },
           { specialization: null },
         ],
       });
@@ -227,7 +229,7 @@ export class VendorRepository {
         district: true,
         city: true,
         pincode: true,
-        specialization: true,
+        specializations: true,
         deletedAt: true,
       },
     });
@@ -261,7 +263,7 @@ export class VendorRepository {
         district: true,
         city: true,
         pincode: true,
-        specialization: true,
+        specializations: true,
         deletedAt: true,
       },
     });

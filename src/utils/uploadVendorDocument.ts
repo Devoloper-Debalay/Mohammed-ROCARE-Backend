@@ -22,7 +22,7 @@ export async function uploadVendorDocument(
 
     const uploadStream = cloudinary.uploader.upload_stream(
       {
-        folder: "rocare/vendor-documents",
+        folder: "just24you/vendor-documents",
         public_id: publicId,
         overwrite: true,
         resource_type: "image",

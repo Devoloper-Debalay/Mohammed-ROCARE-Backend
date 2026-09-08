@@ -4,7 +4,7 @@ import "../../container"; // ensure the DI container is initialized before resol
 import { container } from "tsyringe";
 import { VendorController } from "./vendor.controller";
 import { requireVendorAuth } from "../auth/vendor/vendor-auth.middleware";
-import { enforceVendor } from "../../middlewares/enforceVendor";
+import { enforceVendor, requireApprovedVendor } from "../../middlewares/enforceVendor";
 import { dtoValidation } from "../../middlewares/dtoValidation";
 import {
   UpdateVendorProfileDto,
@@ -15,7 +15,10 @@ import {
   LeadActionDto,
   PurchasePartDto,
   PurchaseProductDto,
-  RechargeWalletDto,
+  CreateWalletRechargeOrderDto,
+  VerifyWalletRechargeDto,
+  CompleteCashPaymentDto,
+  VerifyLeadRazorpayPaymentDto,
   ComplaintDto,
   VendorCreateLeadDto,
 } from "./vendor.dto";
@@ -66,26 +69,58 @@ vendorRouter.post(
 
 vendorRouter.get("/wallet", controller.wallet);
 vendorRouter.get("/wallet/history", controller.walletHistory);
-vendorRouter.post("/wallet/recharge", dtoValidation(RechargeWalletDto), controller.recharge);
+vendorRouter.post(
+  "/wallet/recharge/order",
+  requireApprovedVendor(),
+  dtoValidation(CreateWalletRechargeOrderDto),
+  controller.createRechargeOrder
+);
+vendorRouter.post(
+  "/wallet/recharge/verify",
+  requireApprovedVendor(),
+  dtoValidation(VerifyWalletRechargeDto),
+  controller.verifyRecharge
+);
 vendorRouter.post("/wallet/raise-issue", dtoValidation(ComplaintDto), controller.walletIssue);
 
-// Vendor Leads (Technicians)
-vendorRouter.post("/leads", dtoValidation(VendorCreateLeadDto), controller.createLead);
+// Vendor Leads (Technicians) — viewing is open to any pending vendor; acting
+// on a lead (accept/start/deny/complete) requires admin approval.
+vendorRouter.post("/leads", requireApprovedVendor(), dtoValidation(VendorCreateLeadDto), controller.createLead);
 vendorRouter.get("/leads", enforceVendor(VendorRole.TECHNICIAN), controller.leads);
 vendorRouter.get("/leads/:leadId", enforceVendor(VendorRole.TECHNICIAN), controller.lead);
-vendorRouter.post("/leads/:leadId/accept", enforceVendor(VendorRole.TECHNICIAN), controller.accept);
-vendorRouter.post("/leads/:leadId/start", enforceVendor(VendorRole.TECHNICIAN), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.start);
-vendorRouter.post("/leads/:leadId/deny", enforceVendor(VendorRole.TECHNICIAN), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.deny);
-vendorRouter.post("/leads/:leadId/complete", enforceVendor(VendorRole.TECHNICIAN), controller.complete);
+vendorRouter.post("/leads/:leadId/accept", enforceVendor(VendorRole.TECHNICIAN), requireApprovedVendor(), controller.accept);
+vendorRouter.post("/leads/:leadId/start", enforceVendor(VendorRole.TECHNICIAN), requireApprovedVendor(), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.start);
+vendorRouter.post("/leads/:leadId/deny", enforceVendor(VendorRole.TECHNICIAN), requireApprovedVendor(), upload.fields([{ name: "image", maxCount: 1 }]), dtoValidation(LeadActionDto), controller.deny);
+vendorRouter.post("/leads/:leadId/complete", enforceVendor(VendorRole.TECHNICIAN), requireApprovedVendor(), controller.complete);
+vendorRouter.post(
+  "/leads/:leadId/complete/cash",
+  enforceVendor(VendorRole.TECHNICIAN),
+  requireApprovedVendor(),
+  dtoValidation(CompleteCashPaymentDto),
+  controller.completeCash
+);
+vendorRouter.post(
+  "/leads/:leadId/complete/razorpay/order",
+  enforceVendor(VendorRole.TECHNICIAN),
+  requireApprovedVendor(),
+  controller.createLeadRazorpayOrder
+);
+vendorRouter.post(
+  "/leads/:leadId/complete/razorpay/verify",
+  enforceVendor(VendorRole.TECHNICIAN),
+  requireApprovedVendor(),
+  dtoValidation(VerifyLeadRazorpayPaymentDto),
+  controller.verifyLeadRazorpayPayment
+);
 
 vendorRouter.get("/notifications", controller.notifications);
 vendorRouter.patch("/notifications/:id/read", controller.read);
 vendorRouter.patch("/notifications/read-all", controller.readAll);
 vendorRouter.get("/offers", controller.offers);
 vendorRouter.get("/products", controller.products);
-vendorRouter.post("/products/purchase", dtoValidation(PurchaseProductDto), controller.productPurchase);
+vendorRouter.post("/products/purchase", requireApprovedVendor(), dtoValidation(PurchaseProductDto), controller.productPurchase);
 vendorRouter.get("/parts", controller.parts);
-vendorRouter.post("/parts/purchase", dtoValidation(PurchasePartDto), controller.partPurchase);
+vendorRouter.post("/parts/purchase", requireApprovedVendor(), dtoValidation(PurchasePartDto), controller.partPurchase);
 vendorRouter.get("/complaints", controller.complaints);
 vendorRouter.post("/complaints", dtoValidation(ComplaintDto), controller.complaint);
 

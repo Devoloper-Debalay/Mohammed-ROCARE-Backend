@@ -355,7 +355,7 @@ export class ProductsService {
     const cleanedData = cleanProductInput(data);
     let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/products");
       images = [...images, ...uploadedUrls];
     }
 
@@ -384,7 +384,7 @@ export class ProductsService {
     let images = cleanedData.images as string[] | undefined;
     if (imageBuffers && imageBuffers.length > 0) {
       const existing = await prisma.product.findUnique({ where: { id } });
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/products");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/products");
       const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing?.images ?? [];
       images = [...baseImages, ...uploadedUrls];
     }
@@ -437,7 +437,7 @@ export class ProductsService {
     const cleanedData = cleanPartInput(data);
     let images: string[] = Array.isArray(cleanedData.images) ? [...cleanedData.images] : [];
     if (imageBuffers && imageBuffers.length > 0) {
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/parts");
       images = [...images, ...uploadedUrls];
     }
 
@@ -458,7 +458,7 @@ export class ProductsService {
     let images = cleanedData.images as string[] | undefined;
     if (imageBuffers && imageBuffers.length > 0) {
       const existing = await prisma.part.findUnique({ where: { id } });
-      const uploadedUrls = await uploadMultipleImages(imageBuffers, "rocare/parts");
+      const uploadedUrls = await uploadMultipleImages(imageBuffers, "just24you/parts");
       const baseImages = images !== undefined ? (Array.isArray(images) ? images : []) : existing?.images ?? [];
       images = [...baseImages, ...uploadedUrls];
     }
@@ -471,11 +471,11 @@ export class ProductsService {
   }
 
   async uploadProductImage(fileBuffer: Buffer) {
-    return uploadProductImage(fileBuffer, "rocare/products");
+    return uploadProductImage(fileBuffer, "just24you/products");
   }
 
   async uploadPartImage(fileBuffer: Buffer) {
-    return uploadPartImage(fileBuffer, "rocare/parts");
+    return uploadPartImage(fileBuffer, "just24you/parts");
   }
 
   async inventory(scope: AdminScope, page = 1, limit = 50) {

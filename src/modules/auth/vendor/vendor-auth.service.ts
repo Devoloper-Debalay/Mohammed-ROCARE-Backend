@@ -70,26 +70,20 @@ export class VendorAuthService {
       password: hashed,
       referralCode: generateReferralCode(input.fullName),
       referredByVendorId,
+      // Direct signup — no phone OTP step, matching the customer signup flow.
+      phoneVerified: true,
     });
-
-    // Send a phone verification OTP. The OTP itself is stored hashed in the database.
-    const code = await this.authRepo.createOtp(vendor.phone, "SIGNUP");
-    await vendorSmsService.sendOtp(vendor.phone, code, "SIGNUP");
 
     // Email is best-effort — a mail provider hiccup should never fail signup.
     if (vendor.email) {
       const { subject: welcomeSubject, html: welcomeHtml } = registrationReceivedEmail(vendor.fullName, vendor.vendorCode);
       await sendMail({ to: vendor.email, subject: welcomeSubject, html: welcomeHtml }).catch(() => undefined);
-
-      const { subject: otpSubject, html: otpHtml } = otpEmail(code, "SIGNUP");
-      await sendMail({ to: vendor.email, subject: otpSubject, html: otpHtml }).catch(() => undefined);
     }
 
     return {
       vendorId: vendor.id,
       vendorCode: vendor.vendorCode,
       phone: vendor.phone,
-      otpSent: true,
     };
   }
 
@@ -305,15 +299,17 @@ export class VendorAuthService {
       throw createHttpError(403, "Phone number is not verified. Please verify your phone first.");
     }
 
-    if (
-      vendor.verificationStatus !== VendorVerificationStatus.VERIFIED ||
-      vendor.profileStatus !== VendorProfileStatus.PUBLISHED
-    ) {
-      throw createHttpError(
-        403,
-        `Account not yet active (verification: ${vendor.verificationStatus}, profile: ${vendor.profileStatus}). Please wait for admin approval.`
-      );
+    if (vendor.profileStatus === VendorProfileStatus.BLOCKED) {
+      throw createHttpError(403, "Your vendor account has been blocked. Please contact support.");
     }
+    if (vendor.profileStatus === VendorProfileStatus.DELETED) {
+      throw createHttpError(403, "This vendor account no longer exists.");
+    }
+
+    // Login itself no longer requires admin approval — a pending vendor can sign
+    // in, complete their profile/KYC, and browse read-only. Approval (verificationStatus
+    // === VERIFIED && profileStatus === PUBLISHED) is enforced per-action instead, via
+    // requireApprovedVendor on lead/purchase routes.
 
     const accessToken = signVendorAccessToken(vendor.id, vendor.role);
     const refreshToken = signVendorRefreshToken(vendor.id, vendor.role);
@@ -333,6 +329,8 @@ export class VendorAuthService {
       refreshTokenExpiresAt: getVendorTokenExpiry(refreshToken, "refresh").toISOString(),
       vendorId: vendor.id,
       role: vendor.role,
+      verificationStatus: vendor.verificationStatus,
+      profileStatus: vendor.profileStatus,
     };
   }
 

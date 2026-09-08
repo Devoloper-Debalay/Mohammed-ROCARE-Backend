@@ -16,11 +16,11 @@ const SMTP_PASS = process.env.SMTP_PASS;
 const FROM_EMAIL =
   process.env.SMTP_FROM_EMAIL ||
   SMTP_USER ||
-  "noreply.rocare@gmail.com";
+  "noreply.just24you@gmail.com";
 
 const FROM_NAME =
   process.env.SMTP_FROM_NAME ||
-  "ROCARE";
+  "Just24You";
 
 export interface SendMailInput {
   to: string;

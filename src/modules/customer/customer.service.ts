@@ -115,7 +115,7 @@ export class CustomerService {
                 lastName: sponsorVendor.fullName.split(" ").slice(1).join(" ") || "",
                 email:
                   sponsorVendor.email ||
-                  `${sponsorVendor.phone.replace(/\D/g, "")}@vendor.rocare.local`,
+                  `${sponsorVendor.phone.replace(/\D/g, "")}@vendor.just24you.local`,
                 phone: sponsorVendor.phone,
                 password: sponsorVendor.password,
                 role: "VENDOR" as any,
@@ -137,7 +137,7 @@ export class CustomerService {
         firstName: input.firstName,
         middleName: input.middleName || "",
         lastName: input.lastName,
-        email: email || `${phone!.replace(/\D/g, "")}@customer.rocare.local`,
+        email: email || `${phone!.replace(/\D/g, "")}@customer.just24you.local`,
         phone,
         password,
         homeTown,
@@ -154,11 +154,11 @@ export class CustomerService {
     // await this.issueOtp(phone, "SIGNUP");
 
     await logActivity(user.id, "CUSTOMER_SIGNUP", { phone: user.phone, email: user.email });
-    if (email && !email.endsWith("@customer.rocare.local")) {
+    if (email && !email.endsWith("@customer.just24you.local")) {
       await sendMailSafe({
         to: email,
-        subject: "Welcome to ROCARE",
-        html: simpleEmail("Welcome to ROCARE", "Your customer account has been created successfully."),
+        subject: "Welcome to Just24You",
+        html: simpleEmail("Welcome to Just24You", "Your customer account has been created successfully."),
       });
     }
 
@@ -279,11 +279,11 @@ export class CustomerService {
       channel: isEmail(identifier) ? "EMAIL" : "PHONE",
     });
 
-    if (user.email && !user.email.endsWith("@customer.rocare.local")) {
+    if (user.email && !user.email.endsWith("@customer.just24you.local")) {
       await sendMailSafe({
         to: user.email,
-        subject: "ROCARE password updated",
-        html: simpleEmail("Password Updated", "Your ROCARE customer account password has been reset successfully."),
+        subject: "Just24You password updated",
+        html: simpleEmail("Password Updated", "Your Just24You customer account password has been reset successfully."),
       });
     }
 
@@ -330,8 +330,8 @@ export class CustomerService {
     if (purpose === "LOGIN") {
       await sendMailSafe({
         to: user.email,
-        subject: "ROCARE login successful",
-        html: simpleEmail("Login successful", "Your ROCARE customer account was accessed successfully."),
+        subject: "Just24You login successful",
+        html: simpleEmail("Login successful", "Your Just24You customer account was accessed successfully."),
       });
     }
     return { verified: true, accessToken: signCustomerAccessToken(user.id), customerId: user.id };

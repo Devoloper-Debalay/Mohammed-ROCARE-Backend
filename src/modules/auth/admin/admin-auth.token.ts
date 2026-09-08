@@ -11,7 +11,7 @@ export interface AdminAccessTokenPayload extends JwtPayload {
   userId: string;
   role: AdminRole;
   tokenType: "ADMIN_ACCESS";
-  aud: "rocare-admin";
+  aud: "just24you-admin";
 }
 
 function accessSecret(): string {
@@ -33,14 +33,14 @@ export function signAdminAccessToken(
     accessSecret(),
     {
       expiresIn: ADMIN_ACCESS_EXPIRES_IN,
-      audience: "rocare-admin",
+      audience: "just24you-admin",
     }
   );
 }
 
 export function verifyAdminAccessToken(token: string): AdminAccessTokenPayload {
   try {
-    const payload = verify(token, accessSecret(), { audience: "rocare-admin" }) as AdminAccessTokenPayload;
+    const payload = verify(token, accessSecret(), { audience: "just24you-admin" }) as AdminAccessTokenPayload;
     if (payload.tokenType !== "ADMIN_ACCESS" || (payload.role !== Role.ADMIN && payload.role !== Role.SADMIN)) {
       throw createHttpError(401, "Invalid admin token.");
     }

@@ -1,9 +1,10 @@
 import { injectable, inject } from "tsyringe";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import bcrypt from "bcrypt";
 import createHttpError from "http-errors";
 import { VendorRepository } from "./vendor.repository";
 import { uploadVendorDocument } from "../../utils/uploadVendorDocument";
+import razorpay from "../../config/razorpay";
 import { ProofInput, VendorPublicProfile } from "./vendor.types";
 import { CommissionStatus, LeadStatus, ServiceRequestStatus, OfferType, PaymentMethod, PaymentStatus, VendorComplaintCategory, VendorComplaintStatus, VendorProfileStatus, VendorRole, WalletTxnStatus, WalletTxnType } from "../../generated/prisma/enums";
 import { Prisma, PrismaClient } from "../../generated/prisma/client";
@@ -92,6 +93,7 @@ export class VendorService {
       experienceYears: vendor.experienceYears ?? null,
       skills: vendor.skills ?? [],
       specialization: vendor.specialization ?? null,
+      specializations: vendor.specializations ?? [],
       verificationStatus: vendor.verificationStatus,
       profileStatus: vendor.profileStatus,
       rejectionReason: vendor.rejectionReason ?? null,
@@ -202,7 +204,16 @@ export class VendorService {
     if (data.longitude !== undefined) safeUpdateData.longitude = data.longitude;
     if (data.experienceYears !== undefined) safeUpdateData.experienceYears = data.experienceYears;
     if (data.skills !== undefined) safeUpdateData.skills = data.skills;
-    if (data.specialization !== undefined) safeUpdateData.specialization = data.specialization;
+    if (data.specializations !== undefined) {
+      const list = Array.isArray(data.specializations)
+        ? data.specializations.map((s: string) => s.trim()).filter(Boolean)
+        : [];
+      safeUpdateData.specializations = list;
+      // Keep the legacy single-value column in sync for any code that still reads it.
+      safeUpdateData.specialization = list[0] ?? null;
+    } else if (data.specialization !== undefined) {
+      safeUpdateData.specialization = data.specialization;
+    }
 
     // Explicitly guarantee verificationStatus and profileStatus are NEVER overwritten or downgraded by profile updates
     delete (safeUpdateData as any).verificationStatus;
@@ -366,17 +377,107 @@ export class VendorService {
     return { items, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
   }
 
-  async recharge(vendorId: string, amount: number) {
+  /**
+   * Step 1 of a real recharge: create a Razorpay order and a matching PENDING
+   * WalletTransaction. The wallet is NOT credited yet — that only happens once
+   * verifyRecharge() confirms Razorpay's payment signature.
+   */
+  async createRechargeOrder(vendorId: string, amount: number) {
     if (amount <= 0) throw createHttpError(400, "Recharge amount must be greater than zero.");
-    const result = await this.prisma.$transaction(async (tx) => {
-      const wallet = await tx.wallet.findUnique({ where: { vendorId } });
-      if (!wallet) throw createHttpError(404, "Wallet not found.");
-      const next = wallet.balance.plus(amount);
-      const updated = await tx.wallet.update({ where: { id: wallet.id }, data: { balance: next, totalRecharge: wallet.totalRecharge.plus(amount) } });
-      const transaction = await tx.walletTransaction.create({ data: { walletId: wallet.id, type: WalletTxnType.RECHARGE, status: WalletTxnStatus.SUCCESS, amount, balanceAfter: next, note: "Demo wallet recharge" } });
-      return { wallet: updated, transaction };
+
+    const wallet = await this.prisma.wallet.findUnique({ where: { vendorId } });
+    if (!wallet) throw createHttpError(404, "Wallet not found.");
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100), // paise
+      currency: "INR",
+      // Razorpay caps `receipt` at 56 chars — keep it short, the full vendorId lives in `notes`.
+      receipt: `wr_${Date.now()}_${vendorId.slice(0, 8)}`,
+      notes: { vendorId, purpose: "WALLET_RECHARGE" },
     });
-    await this.notify(vendorId, "Wallet recharged", `${amount} coins were added to your wallet.`, "WALLET_RECHARGED");
+
+    await this.prisma.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        type: WalletTxnType.RECHARGE,
+        status: WalletTxnStatus.PENDING,
+        amount,
+        referenceId: order.id,
+        note: "Recharge initiated — awaiting payment confirmation.",
+      },
+    });
+
+    return {
+      orderId: order.id,
+      amount,
+      currency: "INR",
+      keyId: process.env.RAZORPAY_KEY_ID || "",
+    };
+  }
+
+  /**
+   * Step 2: verify Razorpay's payment signature server-side, then — and only
+   * then — credit the wallet. Idempotent: replaying the same verified payment
+   * returns the already-credited state instead of double-crediting.
+   */
+  async verifyRecharge(
+    vendorId: string,
+    data: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }
+  ) {
+    const secret = process.env.RAZORPAY_KEY_SECRET || "";
+    const expectedSignature = createHmac("sha256", secret)
+      .update(`${data.razorpayOrderId}|${data.razorpayPaymentId}`)
+      .digest("hex");
+
+    const expectedBuf = Buffer.from(expectedSignature, "hex");
+    const actualBuf = Buffer.from(data.razorpaySignature, "hex");
+    const signatureValid =
+      expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
+
+    if (!signatureValid) {
+      throw createHttpError(400, "Payment verification failed. Signature mismatch.");
+    }
+
+    const wallet = await this.prisma.wallet.findUnique({ where: { vendorId } });
+    if (!wallet) throw createHttpError(404, "Wallet not found.");
+
+    const pendingTxn = await this.prisma.walletTransaction.findFirst({
+      where: { walletId: wallet.id, referenceId: data.razorpayOrderId, type: WalletTxnType.RECHARGE },
+    });
+    if (!pendingTxn) throw createHttpError(404, "Recharge order not found for this vendor.");
+
+    if (pendingTxn.status === WalletTxnStatus.SUCCESS) {
+      // Already credited (e.g. the verify call was retried) — return as-is, don't double-credit.
+      return { wallet, transaction: pendingTxn };
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const freshWallet = await tx.wallet.findUniqueOrThrow({ where: { id: wallet.id } });
+      const next = freshWallet.balance.plus(pendingTxn.amount);
+      const updatedWallet = await tx.wallet.update({
+        where: { id: wallet.id },
+        data: { balance: next, totalRecharge: freshWallet.totalRecharge.plus(pendingTxn.amount) },
+      });
+      const transaction = await tx.walletTransaction.update({
+        where: { id: pendingTxn.id },
+        data: {
+          status: WalletTxnStatus.SUCCESS,
+          balanceAfter: next,
+          // referenceId stays the order id (stable lookup key for the idempotency
+          // check above) — it's still there for support/reconciliation lookups in
+          // Razorpay's dashboard, just not surfaced in this user-facing note.
+          note: "Wallet recharged via Razorpay",
+        },
+      });
+      return { wallet: updatedWallet, transaction };
+    });
+
+    await this.notify(
+      vendorId,
+      "Wallet recharged",
+      `${pendingTxn.amount} coins were added to your wallet.`,
+      "WALLET_RECHARGED"
+    );
     return result;
   }
 
@@ -462,7 +563,7 @@ export class VendorService {
         address: data.address,
         district: data.district || vendor.district,
         pincode: data.pincode || vendor.pincode,
-        specialization: data.specialization || vendor.specialization,
+        specialization: data.specialization || vendor.specializations[0] || vendor.specialization,
         serviceType: data.serviceType,
         issue: data.issue,
         estimatedAmount: data.estimatedAmount,
@@ -488,7 +589,7 @@ export class VendorService {
     return this.prisma.$transaction(async (tx) => {
       const [lead, vendor] = await Promise.all([
         tx.lead.findUnique({ where: { id: leadId } }),
-        tx.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true, specialization: true } }),
+        tx.vendor.findUnique({ where: { id: vendorId }, select: { branchId: true, specializations: true } }),
       ]);
       if (!lead) throw createHttpError(404, "Lead not found.");
       if (lead.status !== LeadStatus.NEW || lead.assignedVendorId) {
@@ -497,7 +598,12 @@ export class VendorService {
       if (!lead.isReleased) {
         throw createHttpError(409, "This lead has not been released by the admin yet.");
       }
-      if (vendor?.specialization && lead.specialization && vendor.specialization !== lead.specialization) {
+      if (
+        vendor?.specializations &&
+        vendor.specializations.length > 0 &&
+        lead.specialization &&
+        !vendor.specializations.includes(lead.specialization)
+      ) {
         throw createHttpError(403, `This lead requires ${lead.specialization} specialization.`);
       }
 
@@ -546,24 +652,45 @@ export class VendorService {
 
   async startWork(vendorId: string, leadId: string, input: ProofInput) {
     await this.assertTechnician(vendorId);
-    if (input.latitude === undefined || input.longitude === undefined || !input.image) throw createHttpError(400, "latitude, longitude and image are required.");
-    const imageUrl = await uploadVendorDocument(
-      input.image,
-      vendorId,
-      "lead-start",
-      leadId
-    );
+    // Geo-tagged photo + GPS are encouraged but not mandatory — a vendor can
+    // still submit a plain photo, or none at all, and proceed to the job.
+    const imageUrl = input.image ? await uploadVendorDocument(input.image, vendorId, "lead-start", leadId) : null;
     const result = await this.prisma.$transaction(async (tx) => {
       const lead = await tx.lead.findUnique({ where: { id: leadId } });
       if (!lead || lead.assignedVendorId !== vendorId || lead.status !== LeadStatus.ACCEPTED) throw createHttpError(409, "Lead is not ready to start.");
-      const proof = await tx.leadVisitProof.create({ data: { leadId, vendorId, latitude: input.latitude as number, longitude: input.longitude as number, accuracy: input.accuracy, image: imageUrl, capturedAt: new Date() } });
-      const updated = await tx.lead.update({ where: { id: leadId }, data: { status: LeadStatus.PENDING_START_VERIFICATION } });
+      // Auto-approved on submission — no separate admin review step blocking
+      // the vendor from proceeding to the job. The proof is still recorded
+      // for audit purposes (verified=true reflects the automatic approval).
+      const proof = await tx.leadVisitProof.create({
+        data: {
+          leadId,
+          vendorId,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
+          accuracy: input.accuracy,
+          image: imageUrl,
+          capturedAt: new Date(),
+          verified: true,
+          verifiedAt: new Date(),
+        },
+      });
+      const updated = await tx.lead.update({
+        where: { id: leadId },
+        data: { status: LeadStatus.ONGOING, startVerifiedAt: new Date() },
+      });
+      if (updated.serviceRequestId) {
+        await tx.serviceRequest.update({
+          where: { id: updated.serviceRequestId },
+          data: { status: ServiceRequestStatus.ONGOING },
+        });
+      }
       return { lead: updated, proof };
     });
 
-    await this.notify(vendorId, "Start proof submitted", "Your start-work proof is awaiting admin verification.", "LEAD_STARTED");
+    await this.notify(vendorId, "Job started", "You've started this job — mark it complete once the work is done.", "LEAD_STARTED");
 
-    // Alert Branch Admins
+    // FYI to branch admins — informational only, no action needed since this
+    // is auto-approved.
     await this.prisma.user
       .findMany({
         where: {
@@ -579,8 +706,8 @@ export class VendorService {
           await this.prisma.notification.createMany({
             data: admins.map((a) => ({
               userId: a.id,
-              title: "Start-Work Proof Submitted 📸",
-              message: `Technician started work on lead #${result.lead.id.slice(0, 8)}. Awaiting verification.`,
+              title: "Technician Started Job 📸",
+              message: `Technician started work on lead #${result.lead.id.slice(0, 8)}.`,
               type: "START_PROOF_SUBMITTED",
             })),
           });
@@ -598,24 +725,12 @@ export class VendorService {
   ) {
     await this.assertTechnician(vendorId);
 
-    if (
-      input.latitude === undefined ||
-      input.longitude === undefined ||
-      !input.image ||
-      !input.reason
-    ) {
-      throw createHttpError(
-        400,
-        "image, GPS and reason are required."
-      );
+    if (!input.reason) {
+      throw createHttpError(400, "A reason is required to deny this lead.");
     }
 
-    const imageUrl = await uploadVendorDocument(
-      input.image,
-      vendorId,
-      "lead-denial",
-      leadId
-    );
+    // Geo-tagged photo + GPS are encouraged but not mandatory.
+    const imageUrl = input.image ? await uploadVendorDocument(input.image, vendorId, "lead-denial", leadId) : null;
 
     const denyableStatuses: LeadStatus[] = [
       LeadStatus.ACCEPTED,
@@ -647,8 +762,8 @@ export class VendorService {
           vendorId,
           reason: input.reason as string,
           image: imageUrl,
-          latitude: input.latitude as number,
-          longitude: input.longitude as number,
+          latitude: input.latitude ?? null,
+          longitude: input.longitude ?? null,
           capturedAt: new Date(),
         },
       });
@@ -707,6 +822,172 @@ export class VendorService {
       const payment = await tx.payment.create({ data: { leadId, vendorId, amount, method: PaymentMethod.UPI, status: PaymentStatus.PENDING, qrPayload, reviewToken } });
       return { payment, qrPayload };
     });
+  }
+
+  /**
+   * Completion path 1: vendor collected cash in hand from the customer.
+   * The cash is already with the vendor — it does NOT get credited to their
+   * in-app wallet. It's just recorded (method: CASH, PAID) so admins can see
+   * and reconcile it.
+   */
+  async completeLeadCash(vendorId: string, leadId: string, amount: number) {
+    await this.assertTechnician(vendorId);
+    if (amount <= 0) throw createHttpError(400, "Amount must be greater than zero.");
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const lead = await tx.lead.findUnique({ where: { id: leadId } });
+      if (!lead || lead.assignedVendorId !== vendorId || lead.status !== LeadStatus.ONGOING) {
+        throw createHttpError(409, "Only an ongoing lead can be completed.");
+      }
+      const payment = await tx.payment.create({
+        data: {
+          leadId,
+          vendorId,
+          amount,
+          method: PaymentMethod.CASH,
+          status: PaymentStatus.PAID,
+          transactionId: `CASH-${randomUUID()}`,
+          reviewToken: randomUUID(),
+        },
+      });
+      const updatedLead = await tx.lead.update({
+        where: { id: leadId },
+        data: { status: LeadStatus.COMPLETED, completedAt: new Date() },
+      });
+      if (updatedLead.serviceRequestId) {
+        await tx.serviceRequest.update({
+          where: { id: updatedLead.serviceRequestId },
+          data: { assignedVendorId: vendorId, status: ServiceRequestStatus.COMPLETED, completedAt: updatedLead.completedAt },
+        });
+      }
+      return { payment, lead: updatedLead };
+    });
+
+    await this.prisma.user
+      .findMany({
+        where: {
+          role: { in: ["ADMIN", "SADMIN"] as any },
+          isActive: true,
+          deletedAt: null,
+          ...(result.lead.branchId ? { adminProfile: { branchId: result.lead.branchId } } : {}),
+        },
+        select: { id: true },
+      })
+      .then(async (admins) => {
+        if (admins.length > 0) {
+          await this.prisma.notification.createMany({
+            data: admins.map((a) => ({
+              userId: a.id,
+              title: "Cash Payment Collected 💵",
+              message: `Vendor collected ₹${amount} cash for lead #${result.lead.id.slice(0, 8)}. Not credited to vendor wallet.`,
+              type: "CASH_PAYMENT_COLLECTED",
+            })),
+          });
+        }
+      })
+      .catch((err) => console.error("[Notify Admins Cash Payment Error]", err));
+
+    return result;
+  }
+
+  /**
+   * Completion path 2, step 1: create a real Razorpay order for the lead's
+   * agreed price so the customer can pay online.
+   */
+  async createLeadRazorpayOrder(vendorId: string, leadId: string) {
+    await this.assertTechnician(vendorId);
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead || lead.assignedVendorId !== vendorId || lead.status !== LeadStatus.ONGOING) {
+      throw createHttpError(409, "Only an ongoing lead can be completed.");
+    }
+    const amount = Number(lead.estimatedAmount ?? lead.leadPrice ?? 0);
+    if (amount <= 0) throw createHttpError(400, "This lead has no service amount set.");
+
+    const order = await razorpay.orders.create({
+      amount: Math.round(amount * 100),
+      currency: "INR",
+      // Razorpay caps `receipt` at 56 chars.
+      receipt: `lead_${Date.now()}_${leadId.slice(0, 8)}`,
+      notes: { leadId, vendorId, purpose: "LEAD_COMPLETION_PAYMENT" },
+    });
+
+    await this.prisma.payment.create({
+      data: {
+        leadId,
+        vendorId,
+        amount,
+        method: PaymentMethod.RAZORPAY,
+        status: PaymentStatus.PENDING,
+        qrPayload: order.id, // stash the Razorpay order id for the verify lookup below
+        reviewToken: randomUUID(),
+      },
+    });
+
+    return { orderId: order.id, amount, currency: "INR", keyId: process.env.RAZORPAY_KEY_ID || "" };
+  }
+
+  /**
+   * Completion path 2, step 2: verify Razorpay's signature server-side, mark
+   * the lead complete, and credit the vendor's commission — same commission
+   * math as the legacy verifyPayment() flow, just driven by a real payment.
+   */
+  async verifyLeadRazorpayPayment(
+    vendorId: string,
+    leadId: string,
+    data: { razorpayOrderId: string; razorpayPaymentId: string; razorpaySignature: string }
+  ) {
+    await this.assertTechnician(vendorId);
+
+    const secret = process.env.RAZORPAY_KEY_SECRET || "";
+    const expectedSignature = createHmac("sha256", secret)
+      .update(`${data.razorpayOrderId}|${data.razorpayPaymentId}`)
+      .digest("hex");
+    const expectedBuf = Buffer.from(expectedSignature, "hex");
+    const actualBuf = Buffer.from(data.razorpaySignature, "hex");
+    const signatureValid = expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
+    if (!signatureValid) throw createHttpError(400, "Payment verification failed. Signature mismatch.");
+
+    const pendingPayment = await this.prisma.payment.findFirst({
+      where: { leadId, vendorId, qrPayload: data.razorpayOrderId, method: PaymentMethod.RAZORPAY },
+    });
+    if (!pendingPayment) throw createHttpError(404, "Payment order not found for this lead.");
+
+    if (pendingPayment.status === PaymentStatus.PAID) {
+      // Already processed (e.g. verify was retried) — return current state, don't double-process.
+      const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
+      const commission = await this.prisma.commission.findUnique({ where: { leadId } });
+      return { payment: pendingPayment, lead, commission };
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedPayment = await tx.payment.update({
+        where: { id: pendingPayment.id },
+        data: { status: PaymentStatus.PAID, transactionId: data.razorpayPaymentId },
+      });
+      const lead = await tx.lead.update({
+        where: { id: leadId },
+        data: { status: LeadStatus.COMPLETED, completedAt: new Date() },
+      });
+      if (lead.serviceRequestId) {
+        await tx.serviceRequest.update({
+          where: { id: lead.serviceRequestId },
+          data: { assignedVendorId: vendorId, status: ServiceRequestStatus.COMPLETED, completedAt: lead.completedAt },
+        });
+      }
+
+      const percentage = Number(process.env.VENDOR_COMMISSION_PERCENT ?? DEFAULT_COMMISSION_PERCENT);
+      const commissionAmount = updatedPayment.amount.mul(percentage).div(100);
+      const commission = await tx.commission.upsert({
+        where: { leadId },
+        update: {},
+        create: { leadId, vendorId, amount: commissionAmount, percentage, status: CommissionStatus.PENDING },
+      });
+
+      return { payment: updatedPayment, lead, commission };
+    });
+
+    if (result.commission) await this.creditCommission(result.commission.id);
+    return result;
   }
 
   async verifyPayment(paymentId: string) {
@@ -824,7 +1105,7 @@ export class VendorService {
         if (blockedVendor) {
           await this.notify(blockedVendor.id, "Profile restricted", "Your profile was restricted due to low ratings. Contact your local admin.", "PROFILE_RESTRICTED");
           if (blockedVendor.email) {
-            const contactEmail = process.env.SUPPORT_CONTACT_EMAIL || "support@rocare.com";
+            const contactEmail = process.env.SUPPORT_CONTACT_EMAIL || "support@just24you.com";
             const contactPhone = process.env.SUPPORT_CONTACT_PHONE || "+91-00000-00000";
             const { subject, html } = accountRestrictedEmail(blockedVendor.fullName, contactEmail, contactPhone);
             await sendMail({ to: blockedVendor.email, subject, html }).catch(() => undefined);

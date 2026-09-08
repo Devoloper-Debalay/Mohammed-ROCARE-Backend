@@ -419,6 +419,7 @@ model Vendor {
   experienceYears    Int?
   skills             String[]                 @default([])
   specialization     String?
+  specializations    String[]                 @default([])
   verificationStatus VendorVerificationStatus @default(PENDING)
   profileStatus      VendorProfileStatus      @default(DRAFT)
   rejectionReason    String?
@@ -783,10 +784,10 @@ model LeadVisitProof {
   id         String    @id @default(uuid())
   leadId     String
   vendorId   String
-  latitude   Float
-  longitude  Float
+  latitude   Float?
+  longitude  Float?
   accuracy   Float?
-  image      String
+  image      String?
   capturedAt DateTime
   verified   Boolean   @default(false)
   verifiedAt DateTime?
@@ -805,9 +806,9 @@ model LeadDenialProof {
   leadId     String
   vendorId   String
   reason     String
-  image      String
-  latitude   Float
-  longitude  Float
+  image      String?
+  latitude   Float?
+  longitude  Float?
   capturedAt DateTime
   approved   Boolean?
   reviewedAt DateTime?
