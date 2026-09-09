@@ -16,16 +16,18 @@ async function main() {
   const lastName = process.env.SUPER_ADMIN_LAST_NAME?.trim() || "Admin";
   const phone = process.env.SUPER_ADMIN_PHONE?.trim() || undefined;
 
-  if (password.length < 12) throw new Error("SUPER_ADMIN_PASSWORD must be at least 12 characters.");
+  if (password.length < 1) throw new Error("SUPER_ADMIN_PASSWORD is required.");
 
   const hash = await bcrypt.hash(password, 12);
-  const existing = await prisma.user.findUnique({ where: { email } });
+  // Look up by role rather than email: this lets SUPER_ADMIN_EMAIL change
+  // (e.g. to update login credentials) and still update the existing
+  // super admin account, instead of creating a duplicate under the new email.
+  const existing = await prisma.user.findFirst({ where: { role: Role.SADMIN } });
 
   if (existing) {
-    if (existing.role !== Role.SADMIN) throw new Error(`A non-Super-Admin account already uses ${email}. Refusing to overwrite it.`);
     await prisma.user.update({
       where: { id: existing.id },
-      data: { firstName, lastName, phone, password: hash, isActive: true, deletedAt: null },
+      data: { email, firstName, lastName, phone, password: hash, isActive: true, deletedAt: null },
     });
     await prisma.adminProfile.upsert({ where: { userId: existing.id }, update: {}, create: { userId: existing.id, jobTitle: "Super Administrator" } });
     console.log(`Super Admin updated: ${email}`);
