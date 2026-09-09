@@ -35,15 +35,31 @@ app.use(limiter);
 // }); // We can uncomment this for debugging purposes, for Router level logging use middleware in the router files
 
 // API Routes
-app.use("/api", mainRouter);
+//
+// Passenger/LiteSpeed on cPanel does NOT strip the app's registered base URI
+// from the incoming path — req.path arrives as the full public URL path
+// (e.g. "/ecommerce/api/catalog/products"), not stripped down to "/catalog/products"
+// the way it would be behind a typical Passenger reverse proxy. So the mount
+// prefix has to match wherever this app is actually deployed publicly.
+const API_PREFIX = process.env.API_PREFIX || "/api";
+app.use(API_PREFIX, mainRouter);
 
-// Health Check Endpoint
+// Health Check Endpoint — registered at both "/" (domain-root deployments)
+// and the actual API prefix (subdirectory deployments like /ecommerce/api).
 app.get("/", (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: "Just24You Backend API is up and running 🚀",
   });
 });
+if (API_PREFIX !== "/") {
+  app.get(API_PREFIX, (req: Request, res: Response) => {
+    res.status(200).json({
+      success: true,
+      message: "Just24You Backend API is up and running 🚀",
+    });
+  });
+}
 
 // Global Handlers
 app.use(errorHandler);
